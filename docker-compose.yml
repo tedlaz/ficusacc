@@ -27,7 +27,7 @@ services:
     container_name: homeacct-frontend
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "8013:80"
     depends_on:
       backend:
         condition: service_healthy

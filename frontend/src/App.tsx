@@ -4,7 +4,15 @@ import { Toaster } from 'react-hot-toast'
 import { AuthProvider } from '@/contexts'
 import { Layout } from '@/components/Layout'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
-import { LoginPage, RegisterPage, DashboardPage, AccountsPage, TransactionsPage, ReportsPage } from '@/pages'
+import {
+  LoginPage,
+  RegisterPage,
+  DashboardPage,
+  AccountsPage,
+  TransactionsPage,
+  ReportsPage,
+  BackupPage,
+} from '@/pages'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -59,6 +67,16 @@ function App() {
                 <ProtectedRoute>
                   <Layout>
                     <ReportsPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path='/backup'
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <BackupPage />
                   </Layout>
                 </ProtectedRoute>
               }

@@ -35,6 +35,7 @@ export interface TokenResponse {
   access_token: string
   token_type: string
   user_id: number
+  is_superuser: boolean
   company_id: number | null
   company_name: string | null
 }

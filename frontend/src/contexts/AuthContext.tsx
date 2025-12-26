@@ -6,6 +6,7 @@ import { AuthContext } from './AuthContextDef'
 
 interface AuthUser {
   id: number
+  is_superuser: boolean
   companyId: number | null
   companyName: string | null
 }
@@ -32,6 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     api.setToken(token.access_token)
     const authUser: AuthUser = {
       id: token.user_id,
+      is_superuser: token.is_superuser,
       companyId: token.company_id,
       companyName: token.company_name,
     }

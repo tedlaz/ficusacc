@@ -227,6 +227,49 @@ class ApiClient {
     })
     return response.data
   }
+
+  // Database backup/restore endpoints
+  async downloadBackup(): Promise<Blob> {
+    const response = await this.client.get('/database/backup', {
+      responseType: 'blob',
+    })
+    return response.data
+  }
+
+  async createServerBackup(): Promise<{ message: string; filename: string }> {
+    const response = await this.client.post<{ message: string; filename: string }>('/database/backup')
+    return response.data
+  }
+
+  async listBackups(): Promise<{
+    backups: Array<{ filename: string; created_at: string; size_bytes: number }>
+  }> {
+    const response = await this.client.get<{
+      backups: Array<{ filename: string; created_at: string; size_bytes: number }>
+    }>('/database/backups')
+    return response.data
+  }
+
+  async restoreFromUpload(file: File): Promise<{ message: string }> {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await this.client.post<{ message: string }>('/database/restore', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data
+  }
+
+  async restoreFromServerBackup(filename: string): Promise<{ message: string }> {
+    const response = await this.client.post<{ message: string }>(`/database/restore/${filename}`)
+    return response.data
+  }
+
+  async deleteBackup(filename: string): Promise<{ message: string }> {
+    const response = await this.client.delete<{ message: string }>(`/database/backups/${filename}`)
+    return response.data
+  }
 }
 
 export const api = new ApiClient()

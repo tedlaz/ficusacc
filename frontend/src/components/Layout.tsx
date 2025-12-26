@@ -10,6 +10,7 @@ import {
   Menu,
   X,
   Plus,
+  HardDrive,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuth } from '@/contexts'
@@ -28,6 +29,7 @@ const navigation = [
   { name: 'Chart of Accounts', href: '/accounts', icon: BookOpen },
   { name: 'Transactions', href: '/transactions', icon: Receipt },
   { name: 'Reports', href: '/reports', icon: FileText },
+  { name: 'Backup', href: '/backup', icon: HardDrive },
 ]
 
 export function Layout({ children }: LayoutProps) {

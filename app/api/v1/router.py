@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from . import accounts, auth, companies, reports, transactions, users
+from . import accounts, auth, companies, database, reports, transactions, users
 
 api_router = APIRouter()
 
@@ -12,3 +12,4 @@ api_router.include_router(companies.router, prefix="/companies", tags=["Companie
 api_router.include_router(accounts.router, prefix="/accounts", tags=["Accounts"])
 api_router.include_router(transactions.router, prefix="/transactions", tags=["Transactions"])
 api_router.include_router(reports.router, prefix="/reports", tags=["Reports"])
+api_router.include_router(database.router, prefix="/database", tags=["Database"])

@@ -3,6 +3,7 @@ import type { Company, LoginRequest, RegisterRequest } from '@/types'
 
 interface AuthUser {
   id: number
+  is_superuser: boolean
   companyId: number | null
   companyName: string | null
 }

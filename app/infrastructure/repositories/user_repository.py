@@ -78,10 +78,23 @@ class SQLModelUserRepository(IUserRepository):
         return result.scalar_one_or_none()
 
     async def get_active(self, skip: int = 0, limit: int = 100) -> list[UserModel]:
-        """Get all active users."""
-        stmt = select(UserModel).where(UserModel.is_active).offset(skip).limit(limit)
+        """Get active users."""
+        stmt = select(UserModel).where(UserModel.is_active == True).offset(skip).limit(limit)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def email_exists(self, email: str) -> bool:
+        """Check if email is already registered."""
+        user = await self.get_by_email(email)
+        return user is not None
+
+    async def count(self) -> int:
+        """Get the total number of users."""
+        from sqlalchemy import func
+
+        stmt = select(func.count()).select_from(UserModel)
+        result = await self._session.execute(stmt)
+        return result.scalar_one()
 
     async def email_exists(self, email: str) -> bool:
         """Check if an email is already registered."""

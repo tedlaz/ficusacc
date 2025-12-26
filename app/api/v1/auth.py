@@ -33,6 +33,7 @@ async def register(
         return TokenResponse(
             access_token=token,
             user_id=user.id,  # type: ignore
+            is_superuser=user.is_superuser,
             company_id=company.id if company else None,
             company_name=company.name if company else None,
         )
@@ -60,6 +61,7 @@ async def login(
         return TokenResponse(
             access_token=token,
             user_id=user.id,  # type: ignore
+            is_superuser=user.is_superuser,
             company_id=company.id if company else None,
             company_name=company.name if company else None,
         )
@@ -94,6 +96,7 @@ async def switch_company(
         return TokenResponse(
             access_token=token,
             user_id=current_user.id,  # type: ignore
+            is_superuser=current_user.is_superuser,
             company_id=company.id,
             company_name=company.name,
         )

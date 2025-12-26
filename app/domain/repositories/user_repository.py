@@ -31,3 +31,8 @@ class IUserRepository(IRepository[User]):
     async def email_exists(self, email: str) -> bool:
         """Check if an email is already registered."""
         pass
+
+    @abstractmethod
+    async def count(self) -> int:
+        """Get the total number of users."""
+        pass

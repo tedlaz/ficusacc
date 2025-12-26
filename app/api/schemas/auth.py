@@ -26,6 +26,7 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user_id: int
+    is_superuser: bool = False
     company_id: int | None = None
     company_name: str | None = None
 

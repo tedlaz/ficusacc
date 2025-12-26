@@ -77,12 +77,17 @@ class AuthService:
         if existing:
             raise DuplicateEntityError("User", "email", email)
 
+        # Check if this is the first user (will be superuser)
+        user_count = await self._user_repo.count()
+        is_first_user = user_count == 0
+
         # Create the user
         user = User(
             email=email,
             hashed_password=hash_password(password),
             full_name=full_name,
             is_active=True,
+            is_superuser=is_first_user,
         )
         user = await self._user_repo.create(user)
 
