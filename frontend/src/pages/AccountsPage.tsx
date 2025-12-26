@@ -389,6 +389,7 @@ export function AccountsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={closeModal}
+        closeOnOutsideClick={false}
         title={editingAccount ? 'Edit Account' : 'Create Account'}
         footer={
           <>

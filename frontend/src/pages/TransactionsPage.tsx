@@ -462,6 +462,7 @@ export function TransactionsPage() {
         isOpen={isModalOpen}
         onClose={closeModal}
         title={editingTransaction ? 'Επεξεργασία Εγγραφής' : 'Νέα Εγγραφή'}
+        closeOnOutsideClick={false}
         footer={
           <>
             <Button variant='secondary' onClick={closeModal}>
