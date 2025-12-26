@@ -33,7 +33,10 @@ export function Modal({ isOpen, onClose, title, children, footer, closeOnOutside
   return (
     <div className='fixed inset-0 z-50 overflow-y-auto'>
       <div className='flex min-h-screen items-center justify-center p-4'>
-        <div className='fixed inset-0 bg-black bg-opacity-50 transition-opacity' onClick={closeOnOutsideClick ? onClose : undefined} />
+        <div
+          className='fixed inset-0 bg-black bg-opacity-50 transition-opacity'
+          onClick={closeOnOutsideClick ? onClose : undefined}
+        />
         <div className='relative z-10 w-full max-w-lg rounded-xl bg-white shadow-xl'>
           <div className='flex items-center justify-between border-b border-gray-200 p-4'>
             <h2 className='text-lg font-semibold text-gray-900'>{title}</h2>
