@@ -19,7 +19,7 @@ import {
   TableRow,
 } from '@/components/ui'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { Plus, Trash2, Check, X, Pencil, Undo2, Eye } from 'lucide-react'
+import { Plus, Trash2, Check, X, Pencil, Undo2, Eye, Copy } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { format } from 'date-fns'
 import type { Transaction, TransactionCreate, TransactionUpdate } from '@/types'
@@ -163,6 +163,21 @@ export function TransactionsPage() {
       transaction_date: transaction.transaction_date,
       description: transaction.description,
       reference: transaction.reference || '',
+      lines: transaction.lines.map((line) => ({
+        account_id: line.account_id.toString(),
+        amount: line.amount.toString(),
+        description: line.description || '',
+      })),
+    })
+    setIsModalOpen(true)
+  }
+
+  const openCopyModal = (transaction: Transaction) => {
+    setEditingTransaction(null) // null means we're creating a new transaction
+    reset({
+      transaction_date: format(new Date(), 'yyyy-MM-dd'), // Use today's date for the copy
+      description: transaction.description,
+      reference: '', // Clear reference for the copy
       lines: transaction.lines.map((line) => ({
         account_id: line.account_id.toString(),
         amount: line.amount.toString(),
@@ -343,6 +358,14 @@ export function TransactionsPage() {
                   </Button>
                   <Button
                     variant='secondary'
+                    onClick={() => openCopyModal(transaction)}
+                    className='p-2!'
+                    title='Copy transaction'
+                  >
+                    <Copy className='h-4 w-4' />
+                  </Button>
+                  <Button
+                    variant='secondary'
                     onClick={() => handleUnpost(transaction)}
                     className='p-2!'
                     title='Unpost transaction'
@@ -432,6 +455,14 @@ export function TransactionsPage() {
                           title='View transaction'
                         >
                           <Eye className='h-4 w-4' />
+                        </Button>
+                        <Button
+                          variant='secondary'
+                          onClick={() => openCopyModal(transaction)}
+                          className='p-2!'
+                          title='Copy transaction'
+                        >
+                          <Copy className='h-4 w-4' />
                         </Button>
                         <Button
                           variant='secondary'

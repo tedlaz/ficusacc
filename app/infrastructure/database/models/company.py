@@ -20,7 +20,7 @@ class CompanyModel(SQLModel, table=True):
     name: str = Field(max_length=200)
     code: str = Field(unique=True, index=True, max_length=20)
     fiscal_year_start_month: int = Field(default=1, ge=1, le=12)
-    currency: str = Field(default="USD", max_length=3)
+    currency: str = Field(default="EUR", max_length=3)
     is_active: bool = Field(default=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

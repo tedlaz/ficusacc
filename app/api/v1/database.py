@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from app.core.config import settings
 from app.dependencies import CurrentUser
+from app.infrastructure.database.session import reset_database_connections
 
 router = APIRouter()
 
@@ -226,8 +227,11 @@ async def restore_from_upload(
             detail=f"Failed to restore database: {str(e)}",
         )
 
+    # Reset database connections to use the new database file
+    await reset_database_connections()
+
     return RestoreResponse(
-        message="Database restored successfully. Please restart the application for changes to take effect.",
+        message="Η βάση δεδομένων επαναφέρθηκε επιτυχώς.",
     )
 
 
@@ -283,8 +287,11 @@ async def restore_from_server_backup(
             detail=f"Failed to restore database: {str(e)}",
         )
 
+    # Reset database connections to use the new database file
+    await reset_database_connections()
+
     return RestoreResponse(
-        message="Database restored successfully. Please restart the application for changes to take effect.",
+        message="Η βάση δεδομένων επαναφέρθηκε επιτυχώς.",
     )
 
 

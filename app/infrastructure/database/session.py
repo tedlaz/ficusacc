@@ -39,3 +39,13 @@ async def init_db() -> None:
     """Initialize the database by creating all tables."""
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
+
+
+async def reset_database_connections() -> None:
+    """
+    Reset all database connections by disposing the engine's connection pool.
+
+    This should be called after restoring a database to ensure all connections
+    are refreshed and point to the new database file.
+    """
+    await engine.dispose()

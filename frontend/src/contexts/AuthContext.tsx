@@ -80,6 +80,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user])
 
   const login = async (data: { email: string; password: string; company_id?: number | null }) => {
+    // Clear all cached queries to ensure fresh data after login
+    queryClient.clear()
     const token = await api.login(data)
     setAuthFromToken(token)
     await refreshCompanies()
@@ -100,6 +102,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     api.clearToken()
     setUser(null)
     setCompanies([])
+    // Clear all cached queries to prevent stale data on next login
+    queryClient.clear()
   }
 
   const switchCompany = async (companyId: number) => {

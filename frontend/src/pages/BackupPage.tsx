@@ -2,7 +2,8 @@ import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { Button, Card, LoadingSpinner, Modal } from '@/components/ui'
-import { Download, Upload, Trash2, RefreshCw, HardDrive, Clock } from 'lucide-react'
+// import { Download, Upload, Trash2, RefreshCw, HardDrive, Clock } from 'lucide-react'
+import { Download, Upload, Trash2, RefreshCw, Clock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { format } from 'date-fns'
 import { el } from 'date-fns/locale'
@@ -37,16 +38,16 @@ export function BackupPage() {
     enabled: !!user?.is_superuser,
   })
 
-  const createBackupMutation = useMutation({
-    mutationFn: () => api.createServerBackup(),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['backups'] })
-      toast.success(`Αντίγραφο ασφαλείας δημιουργήθηκε: ${data.filename}`)
-    },
-    onError: (error: AxiosError<ApiError>) => {
-      toast.error(error.response?.data?.detail || 'Αποτυχία δημιουργίας αντιγράφου')
-    },
-  })
+  // const createBackupMutation = useMutation({
+  //   mutationFn: () => api.createServerBackup(),
+  //   onSuccess: (data) => {
+  //     queryClient.invalidateQueries({ queryKey: ['backups'] })
+  //     toast.success(`Αντίγραφο ασφαλείας δημιουργήθηκε: ${data.filename}`)
+  //   },
+  //   onError: (error: AxiosError<ApiError>) => {
+  //     toast.error(error.response?.data?.detail || 'Αποτυχία δημιουργίας αντιγράφου')
+  //   },
+  // })
 
   const downloadBackupMutation = useMutation({
     mutationFn: () => api.downloadBackup(),
@@ -160,19 +161,18 @@ export function BackupPage() {
       <Card className='mb-6'>
         <h2 className='text-lg font-semibold text-gray-900 mb-4'>Ενέργειες</h2>
         <div className='flex flex-wrap gap-3'>
-          <Button onClick={() => createBackupMutation.mutate()} isLoading={createBackupMutation.isPending}>
+          {/* <Button onClick={() => createBackupMutation.mutate()} isLoading={createBackupMutation.isPending}>
             <HardDrive className='h-4 w-4 mr-2' />
             Δημιουργία Αντιγράφου στον Server
-          </Button>
+          </Button> */}
           <Button
-            variant='secondary'
             onClick={() => downloadBackupMutation.mutate()}
             isLoading={downloadBackupMutation.isPending}
           >
             <Download className='h-4 w-4 mr-2' />
             Λήψη Αντιγράφου
           </Button>
-          <Button variant='secondary' onClick={() => setIsRestoreModalOpen(true)}>
+          <Button variant='danger' onClick={() => setIsRestoreModalOpen(true)}>
             <Upload className='h-4 w-4 mr-2' />
             Επαναφορά από Αρχείο
           </Button>
