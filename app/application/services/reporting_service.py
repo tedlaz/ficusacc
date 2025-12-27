@@ -1,7 +1,7 @@
 """Reporting service for generating financial reports."""
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from app.domain.repositories.account_repository import IAccountRepository
@@ -320,10 +320,7 @@ class ReportingService:
 
         # Calculate opening balance (all transactions before start_date)
         opening_balances = await self._calculate_account_balances(
-            company_id,
-            date(start_date.year, start_date.month, start_date.day - 1)
-            if start_date.day > 1
-            else start_date,
+            company_id, start_date - timedelta(days=1)
         )
         opening_balance = opening_balances.get(account_id)
         opening = opening_balance.balance if opening_balance else Decimal("0")
