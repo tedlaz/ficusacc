@@ -1,6 +1,7 @@
 """Database backup and restore API routes."""
 
 import shutil
+import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated
@@ -11,7 +12,7 @@ from pydantic import BaseModel
 
 from app.core.config import settings
 from app.dependencies import CurrentUser
-from app.infrastructure.database.session import reset_database_connections
+from app.infrastructure.database.session import engine, reset_database_connections
 
 router = APIRouter()
 
@@ -69,6 +70,7 @@ async def download_backup(
     Download a backup of the current database.
 
     Only superusers can perform this operation.
+    Uses SQLite's backup API to ensure data consistency.
     """
     if not current_user.is_superuser:
         raise HTTPException(
@@ -87,10 +89,40 @@ async def download_backup(
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_filename = f"accounting_backup_{timestamp}.db"
 
+    # Create a temporary backup file for download to ensure consistency
+    backup_dir = get_backup_dir()
+    temp_backup_path = backup_dir / f"temp_download_{timestamp}.db"
+
+    try:
+        # Dispose all async connections to ensure WAL is flushed
+        await engine.dispose()
+
+        # Use SQLite's backup API for consistent backup
+        source_conn = sqlite3.connect(str(db_path))
+        dest_conn = sqlite3.connect(str(temp_backup_path))
+
+        # Force a checkpoint to flush WAL to main database file
+        source_conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
+        # Use the backup API for a consistent copy
+        source_conn.backup(dest_conn)
+
+        dest_conn.close()
+        source_conn.close()
+
+    except Exception as e:
+        if temp_backup_path.exists():
+            temp_backup_path.unlink()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create backup: {str(e)}",
+        )
+
     return FileResponse(
-        path=str(db_path),
+        path=str(temp_backup_path),
         filename=backup_filename,
         media_type="application/octet-stream",
+        background=None,  # Don't delete file in background - let it be cleaned up later
     )
 
 
@@ -102,6 +134,7 @@ async def create_backup(
     Create a server-side backup of the database.
 
     Only superusers can perform this operation.
+    Uses SQLite's backup API to ensure data consistency.
     """
     if not current_user.is_superuser:
         raise HTTPException(
@@ -122,7 +155,22 @@ async def create_backup(
     backup_path = backup_dir / backup_filename
 
     try:
-        shutil.copy2(db_path, backup_path)
+        # Dispose all async connections to ensure WAL is flushed
+        await engine.dispose()
+
+        # Use SQLite's backup API for consistent backup
+        source_conn = sqlite3.connect(str(db_path))
+        dest_conn = sqlite3.connect(str(backup_path))
+
+        # Force a checkpoint to flush WAL to main database file
+        source_conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
+        # Use the backup API for a consistent copy
+        source_conn.backup(dest_conn)
+
+        dest_conn.close()
+        source_conn.close()
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
