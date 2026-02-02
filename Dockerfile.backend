@@ -35,11 +35,11 @@ COPY alembic/ ./alembic/
 COPY alembic.ini ./
 
 # Create non-root user for security
-RUN useradd --create-home --shell /bin/bash appuser && \
+RUN useradd --create-home --shell /bin/bash ted && \
     mkdir -p /app/data && \
-    chown -R appuser:appuser /app
+    chown -R ted:ted /app
 
-USER appuser
+USER ted
 
 # Expose port
 EXPOSE 8000
