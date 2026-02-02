@@ -10,7 +10,8 @@ services:
       - SECRET_KEY=${SECRET_KEY:-your-super-secret-key-change-in-production}
       - BACKEND_CORS_ORIGINS=["http://localhost","http://localhost:80","http://frontend"]
     volumes:
-      - backend-data:/app/data
+      # - backend-data:/app/data
+      - ./database:/app/data
     networks:
       - homeacct-network
     healthcheck:
@@ -44,6 +45,6 @@ networks:
   homeacct-network:
     driver: bridge
 
-volumes:
-  backend-data:
-    driver: local
+# volumes:
+#   backend-data:
+#     driver: local
