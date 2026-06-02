@@ -61,7 +61,7 @@ async def list_transactions(
     current_company: CurrentCompany,
     transaction_service: Annotated[TransactionService, Depends(get_transaction_service)],
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 1000,
     start_date: date | None = None,
     end_date: date | None = None,
     account_id: int | None = None,
