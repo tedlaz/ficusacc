@@ -1,6 +1,7 @@
 """End-to-end tests for server-rendered Flask workflows."""
 
 from datetime import date, timedelta
+from pathlib import Path
 import re
 
 from sqlmodel import Session, select
@@ -11,6 +12,7 @@ from app.infrastructure.database.models import (
     TransactionModel,
     UserModel,
 )
+from app.web.routes import database_path
 
 
 def test_health_and_auth_guards(client):
@@ -245,6 +247,15 @@ def test_company_user_and_backup_pages_render(client, csrf, logged_in):
     response = client.post("/backup/create", data={"csrf_token": csrf})
     assert response.status_code == 302
     assert "accounting_backup_" in client.get("/backup").text
+    response = client.get("/backup/download")
+    assert response.status_code == 200
+    assert response.data.startswith(b"SQLite format 3")
+
+
+def test_database_path_preserves_absolute_sqlite_path(app):
+    with app.app_context():
+        app.config["DATABASE_URL"] = "sqlite:////app/data/accounting.db"
+        assert database_path() == Path("/app/data/accounting.db").resolve()
 
 
 def test_all_reports_download_as_fpdf2_documents(client, logged_in, app):

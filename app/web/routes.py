@@ -24,6 +24,7 @@ from flask import (
     session,
     url_for,
 )
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, func, select
 
@@ -1002,7 +1003,7 @@ def database_path():
     url = current_app.config["DATABASE_URL"]
     if not url.startswith("sqlite"):
         raise RuntimeError("Τα αντίγραφα ασφαλείας υποστηρίζουν μόνο SQLite.")
-    return Path(url.rsplit("///", 1)[-1]).resolve()
+    return Path(make_url(url).database).resolve()
 
 
 def backup_dir():
