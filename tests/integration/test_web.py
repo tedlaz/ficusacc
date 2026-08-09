@@ -208,7 +208,9 @@ def test_all_reports_download_as_fpdf2_documents(client, logged_in, app):
     assert "jspdf" not in reports_page.text.lower()
 
 
-def test_accounts_and_transactions_are_paginated(client, logged_in, app):
+def test_accounts_transactions_and_journal_are_paginated(
+    client, logged_in, app, monkeypatch
+):
     user_id, company_id = logged_in
     with Session(app.extensions["sqlmodel_engine"]) as db:
         for index in range(30):
@@ -241,6 +243,32 @@ def test_accounts_and_transactions_are_paginated(client, logged_in, app):
     assert first_transactions.text.count("data-transaction-row") == 25
     assert second_transactions.text.count("data-transaction-row") == 5
     assert "Σελίδα <strong>2</strong> από <strong>2</strong>" in second_transactions.text
+
+    journal_url = (
+        "/reports/result?report_type=journal&start_date=01/01/2026&end_date=31/01/2026"
+    )
+    first_journal = client.get(journal_url)
+    second_journal = client.get(f"{journal_url}&page=2")
+    assert first_journal.status_code == 200
+    assert first_journal.text.count("data-journal-article") == 25
+    assert second_journal.text.count("data-journal-article") == 5
+    assert first_journal.text.index("Transaction 29") < first_journal.text.index("Transaction 28")
+    assert second_journal.text.index("Transaction 4") < second_journal.text.index("Transaction 3")
+    assert "Σελίδα <strong>1</strong> από <strong>2</strong>" in first_journal.text
+
+    captured = {}
+
+    def capture_pdf(kind, data, company):
+        captured["kind"] = kind
+        captured["entries"] = len(data["entries"])
+        return b"%PDF-full-journal", "journal.pdf"
+
+    monkeypatch.setattr("app.web.routes.build_report_pdf", capture_pdf)
+    pdf = client.get(
+        "/reports/pdf?report_type=journal&start_date=01/01/2026&end_date=31/01/2026"
+    )
+    assert pdf.status_code == 200
+    assert captured == {"kind": "journal", "entries": 30}
 
 
 def test_account_ledger_is_clickable_paginated_and_newest_first(client, logged_in, app):

@@ -907,7 +907,14 @@ def report_result():
     elif kind == "income_statement":
         data = reports.income_statement(db, g.company.id, start, end)
     elif kind == "journal":
-        data = reports.journal(db, g.company.id, start, end)
+        data = reports.journal(
+            db,
+            g.company.id,
+            start,
+            end,
+            requested_page=request.args.get("page", 1, type=int),
+            page_size=PAGE_SIZE,
+        )
     else:
         abort(400)
     return render_template(f"reports/{kind}.html", report=data, report_type=kind)

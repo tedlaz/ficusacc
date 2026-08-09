@@ -5,7 +5,7 @@ from datetime import date
 from decimal import Decimal
 
 from sqlalchemy.orm import selectinload
-from sqlmodel import Session, select
+from sqlmodel import Session, func, select
 
 from app.domain.types import AccountType
 from app.infrastructure.database.models import AccountModel, TransactionModel
@@ -180,10 +180,37 @@ def income_statement(db: Session, company_id: int, start: date, end: date):
             "total_revenue": revenue, "total_expenses": expense, "net_income": revenue - expense}
 
 
-def journal(db: Session, company_id: int, start: date, end: date):
+def journal(
+    db: Session,
+    company_id: int,
+    start: date,
+    end: date,
+    requested_page: int | None = 1,
+    page_size: int | None = None,
+):
+    filters = (
+        TransactionModel.company_id == company_id,
+        TransactionModel.transaction_date >= start,
+        TransactionModel.transaction_date <= end,
+    )
+    total = db.exec(
+        select(func.count()).select_from(TransactionModel).where(*filters)
+    ).one()
+    page = max(requested_page or 1, 1)
+    pages = max((total + page_size - 1) // page_size, 1) if page_size else 1
+    page = min(page, pages)
+    statement = (
+        select(TransactionModel)
+        .where(*filters)
+        .options(selectinload(TransactionModel.lines))
+        .order_by(TransactionModel.transaction_date.desc(), TransactionModel.id.desc())
+    )
+    if page_size:
+        statement = statement.offset((page - 1) * page_size).limit(page_size)
+
     accounts = {a.id: a for a in db.exec(select(AccountModel).where(AccountModel.company_id == company_id))}
     entries = []
-    for transaction in reversed(transactions_between(db, company_id, start, end)):
+    for transaction in db.exec(statement).all():
         debits, credits = [], []
         for line in transaction.lines:
             account = accounts.get(line.account_id)
@@ -192,4 +219,9 @@ def journal(db: Session, company_id: int, start: date, end: date):
             elif account:
                 credits.append((account, abs(line.amount)))
         entries.append({"transaction": transaction, "debits": debits, "credits": credits})
-    return {"start_date": start, "end_date": end, "entries": entries}
+    return {
+        "start_date": start,
+        "end_date": end,
+        "entries": entries,
+        "pagination": {"page": page, "pages": pages, "total": total},
+    }

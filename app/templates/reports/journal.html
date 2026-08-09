@@ -1,1 +1,21 @@
-<article class="panel report-output" data-pdf-title="Ημερολόγιο" data-pdf-file="journal-{{ report.start_date }}-{{ report.end_date }}.pdf"><header><div><p class="eyebrow">{{ report.start_date|dategr }} — {{ report.end_date|dategr }}</p><h2>Ημερολόγιο</h2></div></header><div class="journal-list">{% for entry in report.entries %}<section class="journal-entry"><header><div><time>{{ entry.transaction.transaction_date|dategr }}</time><strong>{{ entry.transaction.description }}</strong>{% if entry.transaction.reference %}<small>{{ entry.transaction.reference }}</small>{% endif %}</div><span class="badge {{ 'posted' if entry.transaction.is_posted else 'draft' }}">{{ 'Οριστική' if entry.transaction.is_posted else 'Πρόχειρη' }}</span></header>{% for account, amount in entry.debits %}<div class="journal-line debit"><span>{{ account.code }} · {{ account.name }}</span><strong>{{ amount|money }}</strong></div>{% endfor %}{% for account, amount in entry.credits %}<div class="journal-line credit"><span>{{ account.code }} · {{ account.name }}</span><strong>{{ amount|money }}</strong></div>{% endfor %}</section>{% else %}<p class="table-empty">Δεν υπάρχουν εγγραφές.</p>{% endfor %}</div></article>
+<article class="panel report-output" data-pdf-title="Ημερολόγιο" data-pdf-file="journal-{{ report.start_date }}-{{ report.end_date }}.pdf">
+  <header><div><p class="eyebrow">{{ report.start_date|dategr }} — {{ report.end_date|dategr }} · {{ report.pagination.total }} άρθρα</p><h2>Ημερολόγιο</h2></div></header>
+  <div class="journal-list">
+  {% for entry in report.entries %}
+    <section class="journal-entry" data-journal-article>
+      <header><div><time>{{ entry.transaction.transaction_date|dategr }}</time><strong>{{ entry.transaction.description }}</strong>{% if entry.transaction.reference %}<small>{{ entry.transaction.reference }}</small>{% endif %}</div><span class="badge {{ 'posted' if entry.transaction.is_posted else 'draft' }}">{{ 'Οριστική' if entry.transaction.is_posted else 'Πρόχειρη' }}</span></header>
+      {% for account, amount in entry.debits %}<div class="journal-line debit"><span>{{ account.code }} · {{ account.name }}</span><strong>{{ amount|money }}</strong></div>{% endfor %}
+      {% for account, amount in entry.credits %}<div class="journal-line credit"><span>{{ account.code }} · {{ account.name }}</span><strong>{{ amount|money }}</strong></div>{% endfor %}
+    </section>
+  {% else %}
+    <p class="table-empty">Δεν υπάρχουν εγγραφές.</p>
+  {% endfor %}
+  </div>
+</article>
+{% if report.pagination.pages > 1 %}
+<nav class="pagination" aria-label="Σελιδοποίηση ημερολογίου">
+  <a class="page-arrow {{ 'disabled' if report.pagination.page == 1 }}" href="{{ url_for('web.report_result', report_type='journal', start_date=report.start_date.strftime('%d/%m/%Y'), end_date=report.end_date.strftime('%d/%m/%Y'), page=report.pagination.page - 1) }}" hx-get="{{ url_for('web.report_result', report_type='journal', start_date=report.start_date.strftime('%d/%m/%Y'), end_date=report.end_date.strftime('%d/%m/%Y'), page=report.pagination.page - 1) }}" hx-target="#report-result" hx-push-url="false" aria-label="Προηγούμενη σελίδα">‹</a>
+  <span>Σελίδα <strong>{{ report.pagination.page }}</strong> από <strong>{{ report.pagination.pages }}</strong></span>
+  <a class="page-arrow {{ 'disabled' if report.pagination.page == report.pagination.pages }}" href="{{ url_for('web.report_result', report_type='journal', start_date=report.start_date.strftime('%d/%m/%Y'), end_date=report.end_date.strftime('%d/%m/%Y'), page=report.pagination.page + 1) }}" hx-get="{{ url_for('web.report_result', report_type='journal', start_date=report.start_date.strftime('%d/%m/%Y'), end_date=report.end_date.strftime('%d/%m/%Y'), page=report.pagination.page + 1) }}" hx-target="#report-result" hx-push-url="false" aria-label="Επόμενη σελίδα">›</a>
+</nav>
+{% endif %}
