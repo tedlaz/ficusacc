@@ -222,18 +222,40 @@ def switch_company():
 @login_required
 def dashboard():
     if not g.company:
-        return render_template("dashboard/index.html", stats=None, accounts=[], transactions=[])
+        return render_template(
+            "dashboard/index.html",
+            cash_accounts=[],
+            cash_total=Decimal("0"),
+            transactions=[],
+            first_transaction_date=None,
+        )
     db = get_db()
-    accounts = list(db.exec(select(AccountModel).where(AccountModel.company_id == g.company.id)
-                            .order_by(AccountModel.code).limit(8)).all())
-    transactions = list(db.exec(select(TransactionModel).where(TransactionModel.company_id == g.company.id)
-                                .order_by(col(TransactionModel.transaction_date).desc()).limit(5)).all())
-    balance = reports.trial_balance(db, g.company.id, date.today())
-    stats = {}
-    for kind in (AccountType.ASSET, AccountType.LIABILITY, AccountType.REVENUE, AccountType.EXPENSE):
-        values = [x.balance for x in balance["accounts"] if x.account.account_type == kind]
-        stats[kind.value] = sum((abs(x) if kind in {AccountType.LIABILITY, AccountType.REVENUE} else x for x in values), Decimal("0"))
-    return render_template("dashboard/index.html", stats=stats, accounts=accounts, transactions=transactions)
+    first_transaction_date = db.exec(
+        select(func.min(TransactionModel.transaction_date)).where(
+            TransactionModel.company_id == g.company.id
+        )
+    ).one()
+    transactions = list(
+        db.exec(
+            select(TransactionModel)
+            .where(TransactionModel.company_id == g.company.id)
+            .order_by(col(TransactionModel.id).desc())
+            .limit(10)
+        ).all()
+    )
+    balances = reports.account_balances(db, g.company.id, date.today())
+    cash_accounts = sorted(
+        [item for item in balances.values() if item.account.code.startswith("38")],
+        key=lambda item: item.account.code,
+    )
+    cash_total = sum((item.balance for item in cash_accounts), Decimal("0"))
+    return render_template(
+        "dashboard/index.html",
+        cash_accounts=cash_accounts,
+        cash_total=cash_total,
+        transactions=transactions,
+        first_transaction_date=first_transaction_date,
+    )
 
 
 # Companies and access
@@ -832,6 +854,24 @@ def transaction_view(transaction_id):
     accounts = list(get_db().exec(select(AccountModel).where(AccountModel.company_id == g.company.id)).all())
     return render_template("transactions/detail.html", transaction=transaction,
                            account_map={a.id: a for a in accounts})
+
+
+@web.get("/transactions/<int:transaction_id>/preview")
+@company_required
+def transaction_preview(transaction_id):
+    transaction = get_db().exec(transaction_query(transaction_id)).first()
+    if not transaction:
+        abort(404)
+    accounts = list(
+        get_db().exec(
+            select(AccountModel).where(AccountModel.company_id == g.company.id)
+        ).all()
+    )
+    return render_template(
+        "transactions/preview.html",
+        transaction=transaction,
+        account_map={account.id: account for account in accounts},
+    )
 
 
 @web.post("/transactions/<int:transaction_id>/post")

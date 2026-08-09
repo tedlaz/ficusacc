@@ -1,0 +1,13 @@
+<article class="transaction-preview-card" role="tooltip">
+  <header>
+    <div><time>{{ transaction.transaction_date|dategr }}</time><strong>{{ transaction.description }}</strong>{% if transaction.reference %}<small>Σχετικό: {{ transaction.reference }}</small>{% endif %}</div>
+    <span class="badge {{ 'posted' if transaction.is_posted else 'draft' }}">{{ 'Οριστική' if transaction.is_posted else 'Πρόχειρη' }}</span>
+  </header>
+  <div class="transaction-preview-lines">
+  {% for line in transaction.lines %}
+    {% set account = account_map.get(line.account_id) %}
+    <div><span>{{ account.code if account else line.account_id }} · {{ account.name if account else 'Άγνωστος λογαριασμός' }}</span><strong class="{{ 'debit' if line.amount > 0 else 'credit' }}">{{ line.amount|money if line.amount > 0 else (-line.amount)|money }}</strong></div>
+  {% endfor %}
+  </div>
+  <footer><span>Χρέωση {{ transaction.lines|selectattr('amount', 'gt', 0)|sum(attribute='amount')|money }}</span><span>Πίστωση {{ transaction.lines|selectattr('amount', 'lt', 0)|sum(attribute='amount')|abs|money }}</span></footer>
+</article>

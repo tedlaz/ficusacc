@@ -18,7 +18,7 @@
       <td data-label="Ποσό" class="amount">{{ debit|money }}</td>
       <td data-label="Κατάσταση"><span class="badge {{ 'posted' if item.is_posted else 'draft' }}">{{ 'Οριστική' if item.is_posted else 'Πρόχειρη' }}</span></td>
       <td class="row-actions">
-        <a class="icon-action" href="{{ url_for('web.transaction_view', transaction_id=item.id) }}" data-modal-url="{{ url_for('web.transaction_view', transaction_id=item.id) }}" data-tooltip="Προβολή" aria-label="Προβολή">{{ icon('eye') }}</a>
+        <a class="icon-action" href="{{ url_for('web.transaction_view', transaction_id=item.id) }}" data-modal-url="{{ url_for('web.transaction_view', transaction_id=item.id) }}" data-transaction-preview-url="{{ url_for('web.transaction_preview', transaction_id=item.id) }}" data-tooltip="Προβολή" aria-label="Προβολή">{{ icon('eye') }}</a>
         {% if item.is_posted %}
           <a class="icon-action" href="{{ url_for('web.transaction_copy', transaction_id=item.id) }}" data-modal-url="{{ url_for('web.transaction_copy', transaction_id=item.id) }}" data-tooltip="Αντιγραφή" aria-label="Αντιγραφή">{{ icon('copy') }}</a>
           <form method="post" action="{{ url_for('web.transaction_unpost', transaction_id=item.id) }}" data-transaction-action data-confirm="Μετατροπή σε πρόχειρη εγγραφή;">

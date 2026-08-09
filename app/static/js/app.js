@@ -1,12 +1,33 @@
 const csrfToken = () => document.querySelector('meta[name="csrf-token"]')?.content || ''
+let transactionPreviewTimer
+let transactionPreviewHideTimer
+let transactionPreviewController
+let transactionPreviewElement
 
 document.addEventListener('click', async (event) => {
   const link = event.target.closest('[data-modal-url]')
   if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
   event.preventDefault()
   event.stopPropagation()
+  hideTransactionPreview()
   await openModal(link.dataset.modalUrl)
 }, true)
+
+document.addEventListener('mouseover', (event) => {
+  const trigger = event.target.closest('[data-transaction-preview-url]')
+  if (!trigger || trigger.contains(event.relatedTarget)) return
+  window.clearTimeout(transactionPreviewHideTimer)
+  window.clearTimeout(transactionPreviewTimer)
+  transactionPreviewTimer = window.setTimeout(() => showTransactionPreview(trigger), 700)
+})
+
+document.addEventListener('mouseout', (event) => {
+  const trigger = event.target.closest('[data-transaction-preview-url]')
+  if (!trigger || trigger.contains(event.relatedTarget)) return
+  window.clearTimeout(transactionPreviewTimer)
+  if (transactionPreviewElement?.contains(event.relatedTarget)) return
+  scheduleTransactionPreviewHide()
+})
 
 document.addEventListener('submit', async (event) => {
   const form = event.target
@@ -235,6 +256,62 @@ function closeModal() {
   if (root) root.innerHTML = ''
   document.body.classList.remove('modal-open')
 }
+
+async function showTransactionPreview(trigger) {
+  transactionPreviewController?.abort()
+  transactionPreviewController = new AbortController()
+  try {
+    const response = await fetch(trigger.dataset.transactionPreviewUrl, {
+      credentials: 'same-origin',
+      signal: transactionPreviewController.signal,
+    })
+    if (!response.ok) return
+    const html = await response.text()
+    if (!trigger.matches(':hover')) return
+    hideTransactionPreview()
+    const popover = document.createElement('div')
+    popover.className = 'transaction-preview-popover'
+    popover.innerHTML = html
+    popover.addEventListener('mouseenter', () => window.clearTimeout(transactionPreviewHideTimer))
+    popover.addEventListener('mouseleave', scheduleTransactionPreviewHide)
+    document.body.append(popover)
+    transactionPreviewElement = popover
+    positionTransactionPreview(popover, trigger)
+  } catch (error) {
+    if (error.name !== 'AbortError') hideTransactionPreview()
+  }
+}
+
+function positionTransactionPreview(popover, trigger) {
+  const triggerBox = trigger.getBoundingClientRect()
+  const margin = 12
+  const width = Math.min(390, window.innerWidth - margin * 2)
+  popover.style.width = `${width}px`
+  let left = Math.min(triggerBox.right - width, window.innerWidth - width - margin)
+  left = Math.max(left, margin)
+  let top = triggerBox.bottom + 9
+  const height = popover.getBoundingClientRect().height
+  if (top + height > window.innerHeight - margin) top = Math.max(margin, triggerBox.top - height - 9)
+  popover.style.left = `${left}px`
+  popover.style.top = `${top}px`
+}
+
+function scheduleTransactionPreviewHide() {
+  window.clearTimeout(transactionPreviewHideTimer)
+  transactionPreviewHideTimer = window.setTimeout(hideTransactionPreview, 180)
+}
+
+function hideTransactionPreview() {
+  window.clearTimeout(transactionPreviewTimer)
+  window.clearTimeout(transactionPreviewHideTimer)
+  transactionPreviewController?.abort()
+  transactionPreviewController = undefined
+  transactionPreviewElement?.remove()
+  transactionPreviewElement = undefined
+}
+
+window.addEventListener('scroll', hideTransactionPreview, true)
+window.addEventListener('resize', hideTransactionPreview)
 
 function formatGreekDateInput(value) {
   const digits = value.replace(/\D/g, '').slice(0, 8)

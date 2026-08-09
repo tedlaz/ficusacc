@@ -21,6 +21,77 @@ def test_health_and_auth_guards(client):
     assert "Είσοδος λογαριασμού" in client.get("/login").text
 
 
+def test_dashboard_uses_company_history_cash_balances_and_database_order(
+    client, logged_in, app
+):
+    user_id, company_id = logged_in
+    with Session(app.extensions["sqlmodel_engine"]) as db:
+        cash = AccountModel(
+            company_id=company_id,
+            code="38.00.01",
+            name="Κεντρικό Ταμείο",
+            account_type="asset",
+        )
+        counter = AccountModel(
+            company_id=company_id,
+            code="50.00.01",
+            name="Προμηθευτές",
+            account_type="liability",
+        )
+        db.add(cash)
+        db.add(counter)
+        db.flush()
+        for index in range(12):
+            transaction = TransactionModel(
+                company_id=company_id,
+                created_by_id=user_id,
+                transaction_date=date(2026, 1, 12) - timedelta(days=index),
+                description=f"Overview entry {index:02d}",
+                is_posted=True,
+            )
+            db.add(transaction)
+            db.flush()
+            db.add(
+                TransactionLineModel(
+                    transaction_id=transaction.id,
+                    account_id=cash.id,
+                    amount=1,
+                    line_order=0,
+                )
+            )
+            db.add(
+                TransactionLineModel(
+                    transaction_id=transaction.id,
+                    account_id=counter.id,
+                    amount=-1,
+                    line_order=1,
+                )
+            )
+        db.commit()
+        newest_id = transaction.id
+
+    dashboard = client.get("/")
+    assert dashboard.status_code == 200
+    assert "<h1>Επισκόπηση</h1>" in dashboard.text
+    assert "Πρώτη ημερομηνία εγγραφής · 01/01/2026" in dashboard.text
+    assert "Ταμιακά διαθέσιμα" in dashboard.text
+    assert "Βασικοί λογαριασμοί" not in dashboard.text
+    assert "Σύνολο ενεργητικού" not in dashboard.text
+    assert "Υποχρεώσεις" not in dashboard.text
+    assert "Έσοδα" not in dashboard.text
+    assert "Έξοδα" not in dashboard.text
+    assert "38.00.01" in dashboard.text
+    assert "Κεντρικό Ταμείο" in dashboard.text
+    assert "12,00 €" in dashboard.text
+    assert "cash-total-row" in dashboard.text
+    assert dashboard.text.count("data-dashboard-transaction") == 10
+    assert dashboard.text.index("Overview entry 11") < dashboard.text.index("Overview entry 10")
+    assert "<strong>Overview entry 00</strong>" not in dashboard.text
+    assert "<strong>Overview entry 01</strong>" not in dashboard.text
+    assert f'data-modal-url="/transactions/{newest_id}"' in dashboard.text
+    assert f'data-transaction-preview-url="/transactions/{newest_id}/preview"' in dashboard.text
+
+
 def test_first_registration_creates_superuser_and_company(client, csrf, app):
     response = client.post(
         "/register",
@@ -109,6 +180,7 @@ def test_balanced_transaction_post_and_reports(client, csrf, logged_in, app):
     page = client.get("/transactions")
     assert page.status_code == 200
     assert 'data-tooltip="Προβολή"' in page.text
+    assert f'data-transaction-preview-url="/transactions/{transaction_id}/preview"' in page.text
     assert 'data-tooltip="Αντιγραφή"' in page.text
     assert 'data-tooltip="Αναίρεση οριστικοποίησης"' in page.text
     assert "data-modal-url" in page.text
@@ -116,6 +188,11 @@ def test_balanced_transaction_post_and_reports(client, csrf, logged_in, app):
     assert new_form.status_code == 200
     assert "data-auto-balance" in new_form.text
     assert client.get(f"/transactions/{transaction_id}", headers={"HX-Request": "true"}).status_code == 200
+    preview = client.get(f"/transactions/{transaction_id}/preview")
+    assert preview.status_code == 200
+    assert "transaction-preview-card" in preview.text
+    assert "Sale" in preview.text
+    assert "Cash" in preview.text
     copy_form = client.get(f"/transactions/{transaction_id}/copy", headers={"HX-Request": "true"})
     assert copy_form.status_code == 200
     assert "data-auto-balance" in copy_form.text

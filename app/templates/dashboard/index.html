@@ -2,19 +2,35 @@
 {% from 'macros/icons.html' import icon %}
 {% block title %}Επισκόπηση | HomeAccounting{% endblock %}
 {% block content %}
-<header class="page-head"><div><p class="eyebrow">{{ today|dategr }}</p><h1>Οικονομική επισκόπηση</h1><p>{{ g.company.name if g.company else 'Δεν έχει επιλεγεί ενεργή εταιρεία' }}</p></div><a class="icon-action icon-action-primary icon-action-large" href="{{ url_for('web.transaction_new') }}" data-modal-url="{{ url_for('web.transaction_new') }}" data-tooltip="Νέα εγγραφή" aria-label="Νέα εγγραφή">{{ icon('plus') }}</a></header>
+<header class="page-head">
+  <div>
+    <p class="eyebrow">{% if first_transaction_date %}Πρώτη ημερομηνία εγγραφής · {{ first_transaction_date|dategr }}{% else %}Χωρίς λογιστικές εγγραφές{% endif %}</p>
+    <h1>Επισκόπηση</h1>
+    <p>{{ g.company.name if g.company else 'Δεν έχει επιλεγεί ενεργή εταιρεία' }}</p>
+  </div>
+  <a class="icon-action icon-action-primary icon-action-large" href="{{ url_for('web.transaction_new') }}" data-modal-url="{{ url_for('web.transaction_new') }}" data-tooltip="Νέα εγγραφή" aria-label="Νέα εγγραφή">{{ icon('plus') }}</a>
+</header>
 {% if not g.company %}
 <section class="empty-state"><span>00</span><h2>Ξεκινήστε με μία εταιρεία</h2><p>Δημιουργήστε ή επιλέξτε εταιρεία για να εμφανιστούν τα οικονομικά δεδομένα.</p><a class="icon-action icon-action-primary icon-action-large" href="{{ url_for('web.company_new') }}" data-modal-url="{{ url_for('web.company_new') }}" data-tooltip="Νέα εταιρεία" aria-label="Νέα εταιρεία">{{ icon('plus') }}</a></section>
 {% else %}
-<section class="stat-grid">
-  <article class="stat-card accent"><span>Σύνολο ενεργητικού</span><strong>{{ stats.asset|money }}</strong><small>Έως σήμερα</small></article>
-  <article class="stat-card"><span>Υποχρεώσεις</span><strong>{{ stats.liability|money }}</strong><small>Πιστωτικό υπόλοιπο</small></article>
-  <article class="stat-card"><span>Έσοδα</span><strong>{{ stats.revenue|money }}</strong><small>Οριστικοποιημένα</small></article>
-  <article class="stat-card"><span>Έξοδα</span><strong>{{ stats.expense|money }}</strong><small>Οριστικοποιημένα</small></article>
-</section>
 <section class="split-grid">
-  <article class="panel"><header><div><p class="eyebrow">Λογιστικό σχέδιο</p><h2>Βασικοί λογαριασμοί</h2></div><a href="{{ url_for('web.accounts_index') }}">Όλοι →</a></header><div class="compact-list">{% for account in accounts %}<div><span class="code">{{ account.code }}</span><strong>{{ account.name }}</strong><small>{{ account.account_type.value }}</small></div>{% else %}<p class="muted">Δεν υπάρχουν λογαριασμοί.</p>{% endfor %}</div></article>
-  <article class="panel"><header><div><p class="eyebrow">Πρόσφατη κίνηση</p><h2>Τελευταίες εγγραφές</h2></div><a href="{{ url_for('web.transactions_index') }}">Όλες →</a></header><div class="compact-list transactions">{% for item in transactions %}<div><time>{{ item.transaction_date|dategr }}</time><strong>{{ item.description }}</strong><span class="badge {{ 'posted' if item.is_posted else 'draft' }}">{{ 'Οριστική' if item.is_posted else 'Πρόχειρη' }}</span></div>{% else %}<p class="muted">Δεν υπάρχουν εγγραφές.</p>{% endfor %}</div></article>
+  <article class="panel">
+    <header><div><p class="eyebrow">Λογαριασμοί 38*</p><h2>Ταμιακά διαθέσιμα</h2></div><a href="{{ url_for('web.accounts_index') }}">Όλοι →</a></header>
+    <div class="compact-list cash-list">
+      {% for item in cash_accounts %}
+      <div><a class="code account-link" href="{{ url_for('web.account_ledger', account_id=item.account.id) }}">{{ item.account.code }}</a><a class="account-link" href="{{ url_for('web.account_ledger', account_id=item.account.id) }}"><strong>{{ item.account.name }}</strong></a><strong class="amount">{{ item.balance|money }}</strong></div>
+      {% else %}<p class="muted">Δεν υπάρχουν λογαριασμοί που ξεκινούν από 38.</p>{% endfor %}
+      <div class="cash-total-row"><span></span><strong>Σύνολο</strong><strong class="amount">{{ cash_total|money }}</strong></div>
+    </div>
+  </article>
+  <article class="panel">
+    <header><div><p class="eyebrow">Με σειρά εισόδου</p><h2>Τελευταίες εγγραφές</h2></div><a href="{{ url_for('web.transactions_index') }}">Όλες →</a></header>
+    <div class="compact-list transactions">
+      {% for item in transactions %}
+      <div data-dashboard-transaction><time>{{ item.transaction_date|dategr }}</time><strong>{{ item.description }}</strong><span class="badge {{ 'posted' if item.is_posted else 'draft' }}">{{ 'Οριστική' if item.is_posted else 'Πρόχειρη' }}</span><a class="icon-action" href="{{ url_for('web.transaction_view', transaction_id=item.id) }}" data-modal-url="{{ url_for('web.transaction_view', transaction_id=item.id) }}" data-transaction-preview-url="{{ url_for('web.transaction_preview', transaction_id=item.id) }}" data-tooltip="Προβολή εγγραφής" aria-label="Προβολή εγγραφής">{{ icon('eye') }}</a></div>
+      {% else %}<p class="muted">Δεν υπάρχουν εγγραφές.</p>{% endfor %}
+    </div>
+  </article>
 </section>
 {% endif %}
 {% endblock %}
