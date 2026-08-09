@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from pydantic import ConfigDict
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
@@ -28,7 +29,4 @@ class UserModel(SQLModel, table=True):
     company_access: list["UserCompanyAccessModel"] = Relationship(back_populates="user")
     transactions: list["TransactionModel"] = Relationship(back_populates="created_by")
 
-    class Config:
-        """Pydantic config."""
-
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

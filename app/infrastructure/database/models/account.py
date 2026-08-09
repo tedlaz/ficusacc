@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
 import sqlalchemy as sa
+from pydantic import ConfigDict
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.domain.types import AccountType
@@ -45,7 +46,4 @@ class AccountModel(AccountBase, table=True):
     children: list["AccountModel"] = Relationship(back_populates="parent")
     transaction_lines: list["TransactionLineModel"] = Relationship(back_populates="account")
 
-    class Config:
-        """Pydantic config."""
-
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

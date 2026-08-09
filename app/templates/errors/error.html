@@ -1,0 +1,9 @@
+{% extends 'base.html' %}
+{% from 'macros/icons.html' import icon %}
+{% block title %}Σφάλμα {{ error.code }}{% endblock %}
+{% block content %}
+<section class="empty-state error-page"><span>{{ error.code }}</span><h1>Κάτι δεν πήγε όπως περιμέναμε.</h1><p>{{ error.description }}</p><a class="icon-action icon-action-primary icon-action-large" href="{{ url_for('web.dashboard') }}" data-tooltip="Επιστροφή" aria-label="Επιστροφή">{{ icon('undo') }}</a></section>
+{% endblock %}
+{% block auth_content %}
+<section class="empty-state error-page"><span>{{ error.code }}</span><h1>Κάτι δεν πήγε όπως περιμέναμε.</h1><p>{{ error.description }}</p><a class="icon-action icon-action-primary icon-action-large" href="{{ url_for('web.login') }}" data-tooltip="Επιστροφή" aria-label="Επιστροφή">{{ icon('undo') }}</a></section>
+{% endblock %}

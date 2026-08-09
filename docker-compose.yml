@@ -1,52 +1,39 @@
 services:
-  backend:
+  app:
     build:
       context: .
-      dockerfile: Dockerfile.backend
-    container_name: ficusacc-backend
+      dockerfile: Dockerfile
+      args:
+        APP_UID: ${APP_UID:-1000}
+        APP_GID: ${APP_GID:-1000}
     restart: unless-stopped
+    init: true
     environment:
-      - DATABASE_URL=sqlite+aiosqlite:///./data/accounting.db
-      - SECRET_KEY=${SECRET_KEY:-your-super-secret-key-change-in-production}
-      - BACKEND_CORS_ORIGINS=["*"]
+      APP_NAME: ${APP_NAME:-HomeAccounting}
+      DEBUG: "false"
+      DATABASE_URL: sqlite:////app/data/accounting.db
+      BACKUP_DIR: /app/backups
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in the deployment .env file}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
     ports:
-      - "8012:8000"
+      - "${APP_PORT:-8013}:8000"
     volumes:
-      # - backend-data:/app/data
       - ./database:/app/data
-    networks:
-      - homeacct-network
+      - ./backups:/app/backups
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
-
-  frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
-    container_name: ficusacc-frontend
-    restart: unless-stopped
-    ports:
-      - "8013:80"
-    depends_on:
-      backend:
-        condition: service_healthy
-    networks:
-      - homeacct-network
-    # healthcheck:
-    #   test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
-    #   interval: 30s
-    #   timeout: 10s
-    #   retries: 3
-    #   start_period: 5s
-
-networks:
-  homeacct-network:
-    driver: bridge
-
-# volumes:
-#   backend-data:
-#     driver: local
+      start_period: 15s
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

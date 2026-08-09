@@ -1,0 +1,14 @@
+{% extends 'partials/modal.html' %}
+{% from 'macros/icons.html' import icon %}
+{% block modal_content %}
+<form method="post" action="{{ url_for('web.account_edit', account_id=account.id) if account else url_for('web.account_new') }}" class="modal-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% if account %}<input type="hidden" name="editing" value="1">{% endif %}
+  <div><p class="eyebrow">{{ 'Επεξεργασία' if account else 'Νέα καταχώριση' }}</p><h2>{{ account.name if account else 'Νέος λογαριασμός' }}</h2></div>
+  <div class="form-grid"><label>Κωδικός<input name="code" required maxlength="20" value="{{ account.code if account else '' }}" placeholder="1000"></label><label>Τύπος<select name="account_type" required><option value="">Επιλέξτε</option>{% for type in account_types %}<option value="{{ type.value }}" {% if account and account.account_type == type %}selected{% endif %}>{{ type.value|title }}</option>{% endfor %}</select></label></div>
+  <label>Ονομασία<input name="name" required maxlength="200" value="{{ account.name if account else '' }}"></label>
+  <label>Γονικός λογαριασμός<select name="parent_id"><option value="">Χωρίς γονικό</option>{% for option in accounts %}<option value="{{ option.id }}" {% if account and account.parent_id == option.id %}selected{% endif %}>{{ option.code }} · {{ option.name }}</option>{% endfor %}</select></label>
+  <label>Περιγραφή<input name="description" maxlength="500" value="{{ account.description or '' if account else '' }}"></label>
+  {% if account %}<label class="check"><input type="checkbox" name="is_active" {% if account.is_active %}checked{% endif %}> Ενεργός λογαριασμός</label>{% endif %}
+  <div class="form-actions"><button type="button" class="icon-action" data-modal-close data-tooltip="Ακύρωση" aria-label="Ακύρωση">{{ icon('close') }}</button><button class="icon-action icon-action-primary" data-tooltip="Αποθήκευση" aria-label="Αποθήκευση">{{ icon('save') }}</button></div>
+</form>
+{% endblock %}

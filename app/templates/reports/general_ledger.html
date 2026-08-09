@@ -1,0 +1,30 @@
+<article class="panel report-output" data-pdf-title="Καρτέλα {{ account.name }}" data-pdf-file="general-ledger-{{ account.code }}.pdf">
+  <header>
+    <div><p class="eyebrow">{{ pagination.total }} οριστικοποιημένες κινήσεις</p><h2>{{ account.code }} · {{ account.name }}</h2></div>
+    <div class="ledger-current"><span>Τρέχον υπόλοιπο</span><strong>{{ current_balance|money }}</strong></div>
+  </header>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Ημερομηνία</th><th>Περιγραφή</th><th>Σχετικό</th><th class="numeric">Χρέωση</th><th class="numeric">Πίστωση</th><th class="numeric">Υπόλοιπο</th></tr></thead>
+    <tbody>
+    {% for entry in entries %}
+      <tr data-report-ledger-row>
+        <td><a class="account-link ledger-date-link" href="{{ url_for('web.transaction_view', transaction_id=entry.transaction.id) }}" data-modal-url="{{ url_for('web.transaction_view', transaction_id=entry.transaction.id) }}" data-transaction-view data-tooltip="Προβολή λογιστικού άρθρου">{{ entry.transaction.transaction_date|dategr }}</a></td>
+        <td>{{ entry.transaction.description }}{% if entry.line.description %}<small>{{ entry.line.description }}</small>{% endif %}</td>
+        <td>{{ entry.transaction.reference or '—' }}</td>
+        <td class="amount">{{ entry.line.amount|money if entry.line.amount > 0 else '—' }}</td>
+        <td class="amount">{{ (-entry.line.amount)|money if entry.line.amount < 0 else '—' }}</td>
+        <td class="amount ledger-balance">{{ entry.balance|money }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="table-empty">Δεν υπάρχουν οριστικοποιημένες κινήσεις.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</article>
+{% if pagination.pages > 1 %}
+<nav class="pagination" aria-label="Σελιδοποίηση καρτέλας">
+  <a class="page-arrow {{ 'disabled' if pagination.page == 1 }}" href="{{ url_for('web.report_result', report_type='general_ledger', account_id=account.id, page=pagination.page - 1) }}" hx-get="{{ url_for('web.report_result', report_type='general_ledger', account_id=account.id, page=pagination.page - 1) }}" hx-target="#report-result" hx-push-url="false" aria-label="Προηγούμενη σελίδα">‹</a>
+  <span>Σελίδα <strong>{{ pagination.page }}</strong> από <strong>{{ pagination.pages }}</strong></span>
+  <a class="page-arrow {{ 'disabled' if pagination.page == pagination.pages }}" href="{{ url_for('web.report_result', report_type='general_ledger', account_id=account.id, page=pagination.page + 1) }}" hx-get="{{ url_for('web.report_result', report_type='general_ledger', account_id=account.id, page=pagination.page + 1) }}" hx-target="#report-result" hx-push-url="false" aria-label="Επόμενη σελίδα">›</a>
+</nav>
+{% endif %}

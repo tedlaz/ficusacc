@@ -1,0 +1,9 @@
+{% extends 'base.html' %}
+{% from 'macros/icons.html' import icon %}
+{% block title %}Είσοδος | HomeAccounting{% endblock %}
+{% block auth_content %}
+<main class="auth-shell">
+  <section class="auth-story"><div class="story-mark">H/A</div><p class="eyebrow">Λογιστική με καθαρή εικόνα</p><h1>Οι αριθμοί σας,<br><em>σε τάξη.</em></h1><p>Πολυεταιρική διπλογραφική λογιστική, σχεδιασμένη για καθημερινή ακρίβεια.</p><div class="ledger-lines"></div></section>
+  <section class="auth-form-wrap"><form method="post" class="auth-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><a href="/" class="wordmark">Home<span>Accounting</span></a><div><p class="eyebrow">Καλώς ήρθατε</p><h2>Είσοδος λογαριασμού</h2></div><label>Email<input type="email" name="email" value="{{ email or '' }}" required autocomplete="email" placeholder="you@example.com"></label><label>Κωδικός<input type="password" name="password" required autocomplete="current-password" placeholder="••••••••"></label><div class="form-actions"><button class="icon-action icon-action-primary icon-action-large" type="submit" data-tooltip="Είσοδος" aria-label="Είσοδος">{{ icon('login') }}</button></div><p class="form-foot">Δεν έχετε λογαριασμό; <a href="{{ url_for('web.register') }}">Δημιουργία</a></p></form></section>
+</main>
+{% endblock %}

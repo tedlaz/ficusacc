@@ -1,0 +1,19 @@
+<article class="panel report-output" data-pdf-title="Ισοζύγιο έως {{ report.as_of_date|dategr }}" data-pdf-file="trial-balance-{{ report.as_of_date }}.pdf">
+  <header><div><p class="eyebrow">Έως {{ report.as_of_date|dategr }}</p><h2>Ισοζύγιο</h2></div></header>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Κωδικός</th><th>Λογαριασμός</th><th>Τύπος</th><th class="numeric">Χρέωση</th><th class="numeric">Πίστωση</th><th class="numeric">Υπόλοιπο</th></tr></thead>
+    <tbody>
+    {% for item in report.accounts %}
+      <tr class="{{ 'trial-summary-row' if item.is_summary else 'trial-detail-row' }}" data-trial-code="{{ item.account.code }}">
+        <td><span class="code">{{ item.account.code }}</span></td>
+        <td><div class="trial-account-name {{ 'nested' if item.level }}" style="--account-level: {{ item.level }}">{% if item.account.id and not item.is_summary %}<a class="account-link" href="{{ url_for('web.account_ledger', account_id=item.account.id) }}">{{ item.account.name }}</a>{% else %}<span>{{ item.account.name }}</span>{% endif %}</div></td>
+        <td>{{ item.account.account_type.value }}</td>
+        <td class="amount">{{ item.debit_total|money }}</td>
+        <td class="amount">{{ item.credit_total|money }}</td>
+        <td class="amount">{{ item.balance|money }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot><tr><th colspan="3">Σύνολο</th><th class="amount">{{ report.total_debits|money }}</th><th class="amount">{{ report.total_credits|money }}</th><th class="amount">{{ (report.total_debits-report.total_credits)|money }}</th></tr></tfoot>
+  </table></div>
+</article>

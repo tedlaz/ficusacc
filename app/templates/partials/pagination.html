@@ -1,0 +1,7 @@
+{% if pagination.pages > 1 %}
+<nav class="pagination" aria-label="Σελιδοποίηση">
+  <a class="page-arrow {{ 'disabled' if pagination.page == 1 }}" href="?page={{ pagination.page - 1 }}" aria-label="Προηγούμενη σελίδα">‹</a>
+  <span>Σελίδα <strong>{{ pagination.page }}</strong> από <strong>{{ pagination.pages }}</strong></span>
+  <a class="page-arrow {{ 'disabled' if pagination.page == pagination.pages }}" href="?page={{ pagination.page + 1 }}" aria-label="Επόμενη σελίδα">›</a>
+</nav>
+{% endif %}

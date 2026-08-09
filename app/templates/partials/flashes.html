@@ -1,0 +1,7 @@
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="flash-stack" aria-live="polite">
+      {% for category, message in messages %}<div class="flash flash-{{ category }}">{{ message }}<button type="button" aria-label="Κλείσιμο" onclick="this.parentElement.remove()">×</button></div>{% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}

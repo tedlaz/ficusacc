@@ -11,12 +11,3 @@ class AccountType(str, Enum):
     EQUITY = "equity"
     REVENUE = "revenue"
     EXPENSE = "expense"
-
-
-class UserRole(str, Enum):
-    """Roles for user access within a company."""
-
-    OWNER = "owner"
-    ADMIN = "admin"
-    ACCOUNTANT = "accountant"
-    VIEWER = "viewer"

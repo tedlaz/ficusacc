@@ -12,23 +12,19 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=True,
+        extra="ignore",
     )
 
     # Application
     APP_NAME: str = "HomeAccounting"
     DEBUG: bool = False
-    API_V1_PREFIX: str = "/api/v1"
-
     # Database
-    DATABASE_URL: str = "sqlite+aiosqlite:///./accounting.db"
+    DATABASE_URL: str = "sqlite:///./accounting.db"
+    BACKUP_DIR: str = "./backups"
 
     # Security
     SECRET_KEY: str = "your-secret-key-change-in-production"
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 120
-
-    # CORS
-    BACKEND_CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:8000"]
+    SESSION_COOKIE_SECURE: bool = False
 
 
 @lru_cache

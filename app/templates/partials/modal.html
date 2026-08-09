@@ -1,0 +1,9 @@
+{% from 'macros/icons.html' import icon %}
+<dialog class="modal" open data-modal>
+  <div class="modal-scrim" aria-hidden="true"></div>
+  <section class="modal-panel" role="document">
+    <button type="button" class="icon-action modal-close" data-modal-close data-tooltip="Κλείσιμο" aria-label="Κλείσιμο">{{ icon('close') }}</button>
+    {% include 'partials/flashes.html' %}
+    {% block modal_content %}{% endblock %}
+  </section>
+</dialog>

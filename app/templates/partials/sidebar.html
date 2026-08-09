@@ -1,0 +1,37 @@
+{% from 'macros/icons.html' import icon %}
+<div class="drawer-scrim" data-drawer-close></div>
+<aside class="sidebar" data-drawer>
+  <div class="brand-block">
+    <a href="{{ url_for('web.dashboard') }}" class="wordmark">Home<span>Accounting</span></a>
+    <p>Διπλογραφική λογιστική</p>
+  </div>
+  <form action="{{ url_for('web.switch_company') }}" method="post" class="company-switcher">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="company-select">Ενεργή εταιρεία</label>
+    <select id="company-select" name="company_id" onchange="this.form.requestSubmit()">
+      {% if not g.company %}<option value="">Δεν έχει επιλεγεί</option>{% endif %}
+      {% for company in companies %}
+        <option value="{{ company.id }}" {% if g.company and company.id == g.company.id %}selected{% endif %}>{{ company.name }}</option>
+      {% endfor %}
+    </select>
+  </form>
+  <nav class="main-nav" aria-label="Κύρια πλοήγηση">
+    <a href="{{ url_for('web.dashboard') }}" class="{{ 'active' if request.endpoint == 'web.dashboard' }}"><span>01</span> Επισκόπηση</a>
+    <a href="{{ url_for('web.accounts_index') }}" class="{{ 'active' if request.endpoint and 'account' in request.endpoint }}"><span>02</span> Λογαριασμοί</a>
+    <a href="{{ url_for('web.transactions_index') }}" class="{{ 'active' if request.endpoint and 'transaction' in request.endpoint }}"><span>03</span> Εγγραφές</a>
+    <a href="{{ url_for('web.reports_index') }}" class="{{ 'active' if request.endpoint and 'report' in request.endpoint }}"><span>04</span> Αναφορές</a>
+    <a href="{{ url_for('web.companies_index') }}" class="{{ 'active' if request.endpoint and 'compan' in request.endpoint }}"><span>05</span> Εταιρείες</a>
+    <a href="{{ url_for('web.users_index') }}" class="{{ 'active' if request.endpoint and 'user' in request.endpoint }}"><span>06</span> Χρήστες</a>
+    <a href="{{ url_for('web.backup_index') }}" class="{{ 'active' if request.endpoint and 'backup' in request.endpoint }}"><span>07</span> Αντίγραφα</a>
+  </nav>
+  <div class="sidebar-footer">
+    <div><strong>{{ g.user.full_name }}</strong><small>{{ g.user.email }}</small></div>
+    <div class="footer-actions">
+      <a href="{{ url_for('web.change_password') }}">Κωδικός</a>
+      <form action="{{ url_for('web.logout') }}" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="icon-action sidebar-icon" data-tooltip="Έξοδος" aria-label="Έξοδος">{{ icon('login') }}</button>
+      </form>
+    </div>
+  </div>
+</aside>

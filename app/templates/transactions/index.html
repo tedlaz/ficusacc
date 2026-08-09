@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% from 'macros/icons.html' import icon %}
+{% block title %}Εγγραφές | HomeAccounting{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div><p class="eyebrow">Ημερολόγιο · {{ pagination.total }} εγγραφές</p><h1>Λογιστικές εγγραφές</h1><p>Χρεώσεις και πιστώσεις με πλήρες ιστορικό.</p></div>
+  <a class="icon-action icon-action-primary icon-action-large" href="{{ url_for('web.transaction_new') }}" data-modal-url="{{ url_for('web.transaction_new') }}" data-tooltip="Νέα εγγραφή" aria-label="Νέα εγγραφή">{{ icon('plus') }}</a>
+</header>
+<section class="panel table-panel"><div class="table-wrap"><table>
+  <thead><tr><th>Ημερομηνία</th><th>Περιγραφή</th><th>Σχετικό</th><th>Ποσό</th><th>Κατάσταση</th><th></th></tr></thead>
+  <tbody>
+  {% for item in transactions %}
+    {% set debit = item.lines|selectattr('amount', 'gt', 0)|sum(attribute='amount') %}
+    <tr data-transaction-row>
+      <td data-label="Ημερομηνία">{{ item.transaction_date|dategr }}</td>
+      <td data-label="Περιγραφή"><strong>{{ item.description }}</strong></td>
+      <td data-label="Σχετικό">{{ item.reference or '—' }}</td>
+      <td data-label="Ποσό" class="amount">{{ debit|money }}</td>
+      <td data-label="Κατάσταση"><span class="badge {{ 'posted' if item.is_posted else 'draft' }}">{{ 'Οριστική' if item.is_posted else 'Πρόχειρη' }}</span></td>
+      <td class="row-actions">
+        <a class="icon-action" href="{{ url_for('web.transaction_view', transaction_id=item.id) }}" data-modal-url="{{ url_for('web.transaction_view', transaction_id=item.id) }}" data-tooltip="Προβολή" aria-label="Προβολή">{{ icon('eye') }}</a>
+        {% if item.is_posted %}
+          <a class="icon-action" href="{{ url_for('web.transaction_copy', transaction_id=item.id) }}" data-modal-url="{{ url_for('web.transaction_copy', transaction_id=item.id) }}" data-tooltip="Αντιγραφή" aria-label="Αντιγραφή">{{ icon('copy') }}</a>
+          <form method="post" action="{{ url_for('web.transaction_unpost', transaction_id=item.id) }}" data-transaction-action data-confirm="Μετατροπή σε πρόχειρη εγγραφή;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="icon-action" data-tooltip="Αναίρεση οριστικοποίησης" aria-label="Αναίρεση οριστικοποίησης">{{ icon('undo') }}</button>
+          </form>
+        {% else %}
+          <a class="icon-action" href="{{ url_for('web.transaction_edit', transaction_id=item.id) }}" data-modal-url="{{ url_for('web.transaction_edit', transaction_id=item.id) }}" data-tooltip="Επεξεργασία" aria-label="Επεξεργασία">{{ icon('edit') }}</a>
+          <form method="post" action="{{ url_for('web.transaction_post', transaction_id=item.id) }}" data-transaction-action data-confirm="Οριστικοποίηση εγγραφής;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="icon-action" data-tooltip="Οριστικοποίηση" aria-label="Οριστικοποίηση">{{ icon('check') }}</button>
+          </form>
+          <form method="post" action="{{ url_for('web.transaction_delete', transaction_id=item.id) }}" data-transaction-action data-confirm="Οριστική διαγραφή εγγραφής;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="icon-action icon-action-danger" data-tooltip="Διαγραφή" aria-label="Διαγραφή">{{ icon('trash') }}</button>
+          </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="table-empty">Δεν υπάρχουν λογιστικές εγγραφές.</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div></section>
+{% include 'partials/pagination.html' %}
+{% endblock %}

@@ -9,3 +9,7 @@ wheels/
 # Virtual environments
 .venv
 *.db
+.pytest_cache/
+pytest-of-*/
+backups/*
+!backups/.gitkeep

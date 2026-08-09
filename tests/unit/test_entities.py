@@ -40,9 +40,8 @@ class TestAccount:
         assert account.parent_id == 1
 
     def test_account_with_empty_code(self):
-        """Test that account can be created (validation is done at API layer)."""
-        # SQLModel doesn't enforce min_length at model level,
-        # validation is done at the API schema layer
+        """Test that model construction allows an empty code."""
+        # Request validation is handled by the Flask route.
         account = Account(
             company_id=1,
             code="",  # Empty code - allowed at model level
@@ -90,9 +89,8 @@ class TestTransaction:
         assert len(transaction.lines) == 2
 
     def test_transaction_with_single_line(self):
-        """Test that transaction model allows single line (validation at service layer)."""
-        # SQLModel doesn't enforce line count at model level,
-        # validation is done at the service/API layer
+        """Test that model construction allows a single line."""
+        # Accounting validation is handled by the Flask route.
         transaction = Transaction(
             company_id=1,
             transaction_date="2024-01-15",
@@ -106,8 +104,7 @@ class TestTransaction:
 
     def test_transaction_unbalanced(self):
         """Test that unbalanced transactions are allowed at model level."""
-        # SQLModel doesn't enforce balance at model level,
-        # validation is done at the service/API layer
+        # Accounting validation is handled by the Flask route.
         transaction = Transaction(
             company_id=1,
             transaction_date="2024-01-15",

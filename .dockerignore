@@ -1,5 +1,4 @@
 # Dependencies
-node_modules/
 __pycache__/
 *.pyc
 *.pyo
@@ -34,6 +33,8 @@ Thumbs.db
 
 # Local database (will use volume in production)
 *.db
+backups/
+database/
 
 # Git
 .git/

@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+{% from 'macros/icons.html' import icon %}
+{% block title %}Καρτέλα {{ account.code }} | HomeAccounting{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div>
+    <p class="eyebrow">Καρτέλα λογαριασμού · {{ pagination.total }} κινήσεις</p>
+    <h1>{{ account.code }} · {{ account.name }}</h1>
+    <p>{{ account.description or 'Όλες οι οριστικοποιημένες κινήσεις, από τη νεότερη προς την παλαιότερη.' }}</p>
+  </div>
+  <div class="ledger-head-actions">
+    <div class="ledger-current"><span>Τρέχον υπόλοιπο</span><strong>{{ current_balance|money }}</strong></div>
+    <a class="icon-action icon-action-large" href="{{ url_for('web.accounts_index') }}" data-tooltip="Επιστροφή στους λογαριασμούς" aria-label="Επιστροφή στους λογαριασμούς">{{ icon('undo') }}</a>
+  </div>
+</header>
+<section class="panel table-panel"><div class="table-wrap"><table>
+  <thead><tr><th>Ημερομηνία</th><th>Περιγραφή</th><th>Σχετικό</th><th class="numeric">Χρέωση</th><th class="numeric">Πίστωση</th><th class="numeric">Υπόλοιπο</th></tr></thead>
+  <tbody>
+  {% for entry in entries %}
+    <tr data-ledger-row>
+      <td data-label="Ημερομηνία"><a class="account-link ledger-date-link" href="{{ url_for('web.transaction_view', transaction_id=entry.transaction.id) }}" data-modal-url="{{ url_for('web.transaction_view', transaction_id=entry.transaction.id) }}" data-transaction-view data-tooltip="Προβολή λογιστικού άρθρου">{{ entry.transaction.transaction_date|dategr }}</a></td>
+      <td data-label="Περιγραφή"><strong>{{ entry.transaction.description }}</strong>{% if entry.line.description %}<small>{{ entry.line.description }}</small>{% endif %}</td>
+      <td data-label="Σχετικό">{{ entry.transaction.reference or '—' }}</td>
+      <td data-label="Χρέωση" class="amount">{{ entry.line.amount|money if entry.line.amount > 0 else '—' }}</td>
+      <td data-label="Πίστωση" class="amount">{{ (-entry.line.amount)|money if entry.line.amount < 0 else '—' }}</td>
+      <td data-label="Υπόλοιπο" class="amount ledger-balance">{{ entry.balance|money }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="table-empty">Δεν υπάρχουν οριστικοποιημένες κινήσεις για τον λογαριασμό.</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div></section>
+{% include 'partials/pagination.html' %}
+{% endblock %}

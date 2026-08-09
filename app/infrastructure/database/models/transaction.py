@@ -4,6 +4,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from pydantic import ConfigDict
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
@@ -35,10 +36,7 @@ class TransactionModel(SQLModel, table=True):
         sa_relationship_kwargs={"cascade": "all, delete-orphan"},
     )
 
-    class Config:
-        """Pydantic config."""
-
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TransactionLineModel(SQLModel, table=True):
@@ -57,7 +55,4 @@ class TransactionLineModel(SQLModel, table=True):
     transaction: TransactionModel = Relationship(back_populates="lines")
     account: "AccountModel" = Relationship(back_populates="transaction_lines")
 
-    class Config:
-        """Pydantic config."""
-
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
