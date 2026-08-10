@@ -1,4 +1,14 @@
-FROM python:3.12-slim
+FROM python:3.12-slim AS builder
+
+WORKDIR /app
+
+COPY --from=ghcr.io/astral-sh/uv:0.8.3 /uv /bin/uv
+COPY pyproject.toml uv.lock ./
+
+RUN uv sync --frozen --no-dev --no-install-project
+
+
+FROM python:3.12-slim AS runtime
 
 ARG APP_UID=1000
 ARG APP_GID=1000
@@ -7,30 +17,21 @@ WORKDIR /app
 
 RUN apt-get update && \
     apt-get install --no-install-recommends -y fonts-dejavu-core && \
-    rm -rf /var/lib/apt/lists/*
-
-COPY --from=ghcr.io/astral-sh/uv:0.8.3 /uv /bin/uv
-
-# Copy dependency files
-COPY pyproject.toml uv.lock ./
-
-RUN uv sync --frozen --no-dev --no-install-project
+    rm -rf /var/lib/apt/lists/* && \
+    groupadd --gid ${APP_GID} ficusacc && \
+    useradd --uid ${APP_UID} --gid ${APP_GID} --create-home --shell /usr/sbin/nologin ficusacc && \
+    mkdir -p /app/data /app/backups && \
+    chown ficusacc:ficusacc /app /app/data /app/backups
 
 # Set environment variables
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-# Copy application code
-COPY app/ ./app/
-COPY alembic/ ./alembic/
-COPY alembic.ini ./
-
-# Create a deterministic non-root user for bind-mounted data directories.
-RUN groupadd --gid ${APP_GID} ficusacc && \
-    useradd --uid ${APP_UID} --gid ${APP_GID} --create-home --shell /usr/sbin/nologin ficusacc && \
-    mkdir -p /app/data /app/backups && \
-    chown -R ficusacc:ficusacc /app
+COPY --from=builder --chown=ficusacc:ficusacc /app/.venv /app/.venv
+COPY --chown=ficusacc:ficusacc app/ ./app/
+COPY --chown=ficusacc:ficusacc alembic/ ./alembic/
+COPY --chown=ficusacc:ficusacc alembic.ini ./
 
 USER ficusacc
 
