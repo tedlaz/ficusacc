@@ -8,6 +8,7 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from typing import Any
 
 from flask import (
     Blueprint,
@@ -47,6 +48,7 @@ web = Blueprint("web", __name__)
 ACCOUNT_TYPES = list(AccountType)
 ROLES = ["owner", "admin", "accountant", "viewer"]
 PAGE_SIZE = 25
+GREEK_MONTHS_SHORT = ("Ιαν", "Φεβ", "Μαρ", "Απρ", "Μαι", "Ιουν", "Ιουλ", "Αυγ", "Σεπ", "Οκτ", "Νοε", "Δεκ")
 
 
 def finish(endpoint: str, **values):
@@ -56,6 +58,53 @@ def finish(endpoint: str, **values):
         response.headers["HX-Redirect"] = target
         return response
     return redirect(target)
+
+
+def cash_chart_data(series: list[reports.MonthlyCashBalance]) -> dict[str, Any]:
+    width, top, bottom, left, right = 960, 24, 218, 76, 938
+    values = [item.balance for item in series]
+    low = min(values + [Decimal("0")])
+    high = max(values + [Decimal("0")])
+    span = high - low
+    is_flat = span == 0
+    padding = span * Decimal("0.1") if span else Decimal("1")
+    low -= padding
+    high += padding
+    span = high - low
+
+    def y_position(value: Decimal) -> float:
+        return round(top + float((high - value) / span) * (bottom - top), 2)
+
+    step = (right - left) / max(len(series) - 1, 1)
+    points = [
+        {
+            "item": item,
+            "label": GREEK_MONTHS_SHORT[item.month.month - 1],
+            "x": round(left + index * step, 2),
+            "y": y_position(item.balance),
+        }
+        for index, item in enumerate(series)
+    ]
+    line_path = " ".join(
+        f"{'M' if index == 0 else 'L'} {point['x']} {point['y']}"
+        for index, point in enumerate(points)
+    )
+    zero_y = y_position(Decimal("0"))
+    area_path = f"{line_path} L {points[-1]['x']} {zero_y} L {points[0]['x']} {zero_y} Z" if points else ""
+    tick_values = (
+        (high, Decimal("0"), low)
+        if is_flat
+        else (high - padding, (high + low) / 2, low + padding)
+    )
+    return {
+        "width": width,
+        "points": points,
+        "line_path": line_path,
+        "area_path": area_path,
+        "zero_y": zero_y,
+        "ticks": [{"value": value, "y": y_position(value)} for value in tick_values],
+        "change": values[-1] - values[-2] if len(values) > 1 else Decimal("0"),
+    }
 
 
 def parse_date(value: str | None, fallback: date | None = None) -> date:
@@ -229,6 +278,7 @@ def dashboard():
             cash_total=Decimal("0"),
             transactions=[],
             first_transaction_date=None,
+            cash_chart=None,
         )
     db = get_db()
     first_transaction_date = db.exec(
@@ -250,12 +300,14 @@ def dashboard():
         key=lambda item: item.account.code,
     )
     cash_total = sum((item.balance for item in cash_accounts), Decimal("0"))
+    cash_chart = cash_chart_data(reports.monthly_cash_balances(db, g.company.id, date.today()))
     return render_template(
         "dashboard/index.html",
         cash_accounts=cash_accounts,
         cash_total=cash_total,
         transactions=transactions,
         first_transaction_date=first_transaction_date,
+        cash_chart=cash_chart,
     )
 
 

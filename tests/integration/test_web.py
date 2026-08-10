@@ -86,6 +86,9 @@ def test_dashboard_uses_company_history_cash_balances_and_database_order(
     assert "Κεντρικό Ταμείο" in dashboard.text
     assert "12,00 €" in dashboard.text
     assert "cash-total-row" in dashboard.text
+    assert "data-cash-chart" in dashboard.text
+    assert "Πορεία ταμιακών διαθεσίμων" in dashboard.text
+    assert 'data-month="2026-01" data-balance="12.00"' in dashboard.text
     assert dashboard.text.count("data-dashboard-transaction") == 10
     assert dashboard.text.index("Overview entry 11") < dashboard.text.index("Overview entry 10")
     assert "<strong>Overview entry 00</strong>" not in dashboard.text

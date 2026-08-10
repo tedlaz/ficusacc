@@ -31,6 +31,12 @@ class SummaryAccount:
     account_type: AccountType
 
 
+@dataclass(frozen=True)
+class MonthlyCashBalance:
+    month: date
+    balance: Decimal
+
+
 def transactions_between(db: Session, company_id: int, start: date, end: date):
     statement = (
         select(TransactionModel)
@@ -70,6 +76,50 @@ def account_balances(db: Session, company_id: int, as_of: date, types=None):
     for item in balances.values():
         item.balance = item.debit_total - item.credit_total
     return balances
+
+
+def monthly_cash_balances(
+    db: Session, company_id: int, as_of: date, months: int = 12
+) -> list[MonthlyCashBalance]:
+    """Return cumulative 38* account balances for a rolling monthly window."""
+    if months < 1:
+        return []
+
+    cash_account_ids = set(
+        db.exec(
+            select(AccountModel.id).where(
+                AccountModel.company_id == company_id,
+                AccountModel.code.startswith("38"),
+            )
+        ).all()
+    )
+    current_month = as_of.replace(day=1)
+    month_index = current_month.year * 12 + current_month.month - 1 - (months - 1)
+    first_month = date(month_index // 12, month_index % 12 + 1, 1)
+    changes: dict[date, Decimal] = {}
+    opening_balance = Decimal("0")
+
+    for transaction in transactions_between(db, company_id, date(1900, 1, 1), as_of):
+        if not transaction.is_posted:
+            continue
+        change = sum(
+            (line.amount for line in transaction.lines if line.account_id in cash_account_ids),
+            Decimal("0"),
+        )
+        if transaction.transaction_date < first_month:
+            opening_balance += change
+            continue
+        month = transaction.transaction_date.replace(day=1)
+        changes[month] = changes.get(month, Decimal("0")) + change
+
+    result = []
+    balance = opening_balance
+    for offset in range(months):
+        index = first_month.year * 12 + first_month.month - 1 + offset
+        month = date(index // 12, index % 12 + 1, 1)
+        balance += changes.get(month, Decimal("0"))
+        result.append(MonthlyCashBalance(month=month, balance=balance))
+    return result
 
 
 def trial_balance(db: Session, company_id: int, as_of: date, include_summaries: bool = False):

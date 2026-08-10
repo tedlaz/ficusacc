@@ -13,6 +13,48 @@
 {% if not g.company %}
 <section class="empty-state"><span>00</span><h2>Ξεκινήστε με μία εταιρεία</h2><p>Δημιουργήστε ή επιλέξτε εταιρεία για να εμφανιστούν τα οικονομικά δεδομένα.</p><a class="icon-action icon-action-primary icon-action-large" href="{{ url_for('web.company_new') }}" data-modal-url="{{ url_for('web.company_new') }}" data-tooltip="Νέα εταιρεία" aria-label="Νέα εταιρεία">{{ icon('plus') }}</a></section>
 {% else %}
+<section class="panel cash-chart-panel" data-cash-chart>
+  <header>
+    <div><p class="eyebrow">Τελευταίοι 12 μήνες</p><h2>Πορεία ταμιακών διαθεσίμων</h2></div>
+    <div class="cash-chart-summary">
+      <span>Τρέχον υπόλοιπο</span>
+      <strong>{{ cash_total|money }}</strong>
+      <small class="{{ 'positive' if cash_chart.change > 0 else 'negative' if cash_chart.change < 0 else '' }}">
+        {{ '+' if cash_chart.change > 0 else '' }}{{ cash_chart.change|money }} από τον προηγούμενο μήνα
+      </small>
+    </div>
+  </header>
+  <div class="cash-chart-wrap">
+    <svg class="cash-chart" viewBox="0 0 {{ cash_chart.width }} 270" role="img" aria-labelledby="cash-chart-title cash-chart-description">
+      <title id="cash-chart-title">Ταμιακά διαθέσιμα ανά μήνα</title>
+      <desc id="cash-chart-description">Γραμμικό διάγραμμα του συνολικού υπολοίπου των λογαριασμών 38 για τους τελευταίους 12 μήνες.</desc>
+      <defs>
+        <linearGradient id="cash-chart-fill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#1f5c48" stop-opacity=".22"/>
+          <stop offset="100%" stop-color="#1f5c48" stop-opacity=".01"/>
+        </linearGradient>
+        <filter id="cash-chart-glow" x="-100%" y="-100%" width="300%" height="300%">
+          <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#17211d" flood-opacity=".16"/>
+        </filter>
+      </defs>
+      {% for tick in cash_chart.ticks %}
+      <line class="chart-grid-line" x1="76" x2="938" y1="{{ tick.y }}" y2="{{ tick.y }}"/>
+      <text class="chart-y-label" x="64" y="{{ tick.y + 4 }}">{{ tick.value|money }}</text>
+      {% endfor %}
+      <line class="chart-zero-line" x1="76" x2="938" y1="{{ cash_chart.zero_y }}" y2="{{ cash_chart.zero_y }}"/>
+      <path class="chart-area" d="{{ cash_chart.area_path }}"/>
+      <path class="chart-line" d="{{ cash_chart.line_path }}"/>
+      {% for point in cash_chart.points %}
+      <g class="chart-point" data-month="{{ point.item.month.strftime('%Y-%m') }}" data-balance="{{ '%.2f'|format(point.item.balance) }}" tabindex="0" role="img" aria-label="{{ point.label }} {{ point.item.month.year }}: {{ point.item.balance|money }}">
+        <circle class="chart-point-halo" cx="{{ point.x }}" cy="{{ point.y }}" r="10"/>
+        <circle class="chart-point-dot" cx="{{ point.x }}" cy="{{ point.y }}" r="4"/>
+        <title>{{ point.label }} {{ point.item.month.year }} · {{ point.item.balance|money }}</title>
+      </g>
+      <text class="chart-x-label {{ 'chart-x-label-alternate' if loop.index is even else '' }}" x="{{ point.x }}" y="254">{{ point.label }}</text>
+      {% endfor %}
+    </svg>
+  </div>
+</section>
 <section class="split-grid">
   <article class="panel">
     <header><div><p class="eyebrow">Λογαριασμοί 38*</p><h2>Ταμιακά διαθέσιμα</h2></div><a href="{{ url_for('web.accounts_index') }}">Όλοι →</a></header>
