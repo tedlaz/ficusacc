@@ -881,8 +881,7 @@ def save_transaction(transaction, accounts):
         db.add(transaction)
         db.flush()
     else:
-        for line in list(transaction.lines):
-            db.delete(line)
+        transaction.lines.clear()
         db.flush()
     transaction.transaction_date = parse_date(request.form.get("transaction_date"))
     transaction.description = request.form.get("description", "").strip()

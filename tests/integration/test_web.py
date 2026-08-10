@@ -218,9 +218,27 @@ def test_balanced_transaction_post_and_reports(client, csrf, logged_in, app):
         f"/transactions/{transaction_id}/edit", headers={"HX-Request": "true"}
     )
     assert edit_form.status_code == 200
-    assert "data-auto-balance" not in edit_form.text
+    assert "data-auto-balance" in edit_form.text
+    response = client.post(
+        f"/transactions/{transaction_id}/edit",
+        data={
+            "csrf_token": csrf,
+            "transaction_date": "16/01/2026",
+            "description": "Updated sale",
+            "reference": "INV-2",
+            "account_id": [str(cash_id), str(revenue_id)],
+            "amount": ["125.00", "-125.00"],
+            "line_description": ["", ""],
+        },
+    )
+    assert response.status_code == 302
     with Session(app.extensions["sqlmodel_engine"]) as db:
-        assert db.get(TransactionModel, transaction_id).is_posted is False
+        transaction = db.get(TransactionModel, transaction_id)
+        assert transaction.is_posted is False
+        assert transaction.transaction_date == date(2026, 1, 16)
+        assert transaction.description == "Updated sale"
+        assert transaction.reference == "INV-2"
+        assert [line.amount for line in transaction.lines] == [125, -125]
 
 
 def test_unbalanced_transaction_is_rejected(client, csrf, logged_in, app):

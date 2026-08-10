@@ -33,7 +33,10 @@ class TransactionModel(SQLModel, table=True):
     created_by: "UserModel" = Relationship(back_populates="transactions")
     lines: list["TransactionLineModel"] = Relationship(
         back_populates="transaction",
-        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "order_by": "TransactionLineModel.line_order",
+        },
     )
 
     model_config = ConfigDict(from_attributes=True)
