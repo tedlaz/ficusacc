@@ -4,7 +4,10 @@
 {% block content %}
 <header class="page-head">
   <div><p class="eyebrow">Ημερολόγιο · {{ pagination.total }} εγγραφές</p><h1>Λογιστικές εγγραφές</h1><p>Χρεώσεις και πιστώσεις με πλήρες ιστορικό.</p></div>
-  <a class="icon-action icon-action-primary icon-action-large" href="{{ url_for('web.transaction_new') }}" data-modal-url="{{ url_for('web.transaction_new') }}" data-tooltip="Νέα εγγραφή" aria-label="Νέα εγγραφή">{{ icon('plus') }}</a>
+  <div class="head-actions">
+    <button class="icon-action icon-action-large" type="button" data-open="journal-export-dialog" data-tooltip="Εξαγωγή σε αρχείο journal" aria-label="Εξαγωγή σε αρχείο journal">{{ icon('download') }}</button>
+    <a class="icon-action icon-action-primary icon-action-large" href="{{ url_for('web.transaction_new') }}" data-modal-url="{{ url_for('web.transaction_new') }}" data-tooltip="Νέα εγγραφή" aria-label="Νέα εγγραφή">{{ icon('plus') }}</a>
+  </div>
 </header>
 <section class="panel table-panel"><div class="table-wrap"><table>
   <thead><tr><th>Ημερομηνία</th><th>Περιγραφή</th><th>Σχετικό</th><th>Ποσό</th><th>Κατάσταση</th><th></th></tr></thead>
@@ -44,4 +47,34 @@
   </tbody>
 </table></div></section>
 {% include 'partials/pagination.html' %}
+<dialog id="journal-export-dialog" class="native-dialog">
+  <form method="post" enctype="multipart/form-data" action="{{ url_for('web.transactions_export_journal') }}" hx-boost="false">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="button" class="icon-action modal-close" data-dialog-close data-tooltip="Κλείσιμο" aria-label="Κλείσιμο">{{ icon('close') }}</button>
+    <p class="eyebrow">Αρχείο κειμένου</p>
+    <h2>Εξαγωγή εγγραφών</h2>
+    <p class="hint">Εξάγονται μόνο οι οριστικοποιημένες εγγραφές του εύρους. Ο σκελετός του αρχείου μετατροπής κατεβαίνει από τη σελίδα <a href="{{ url_for('web.accounts_index') }}">Λογαριασμοί</a>.</p>
+    <div class="form-grid">
+      <label>Από
+        <div class="date-input-wrap">
+          <input type="text" name="start_date" class="greek-date-input" data-greek-date inputmode="numeric" pattern="[0-9]{2}/[0-9]{2}/[0-9]{4}" maxlength="10" placeholder="ηη/μμ/εεεε" value="{{ export_start.strftime('%d/%m/%Y') }}">
+          <input type="date" data-native-date tabindex="-1" aria-hidden="true" value="{{ export_start.isoformat() }}">
+          <button class="date-picker-button" type="button" data-date-picker data-tooltip="Επιλογή ημερομηνίας" aria-label="Επιλογή ημερομηνίας">{{ icon('calendar') }}</button>
+        </div>
+      </label>
+      <label>Έως
+        <div class="date-input-wrap">
+          <input type="text" name="end_date" class="greek-date-input" data-greek-date inputmode="numeric" pattern="[0-9]{2}/[0-9]{2}/[0-9]{4}" maxlength="10" placeholder="ηη/μμ/εεεε" value="{{ export_end.strftime('%d/%m/%Y') }}">
+          <input type="date" data-native-date tabindex="-1" aria-hidden="true" value="{{ export_end.isoformat() }}">
+          <button class="date-picker-button" type="button" data-date-picker data-tooltip="Επιλογή ημερομηνίας" aria-label="Επιλογή ημερομηνίας">{{ icon('calendar') }}</button>
+        </div>
+      </label>
+    </div>
+    <label class="file-drop">Αρχείο μετατροπής λογαριασμών<input type="file" name="mapping" accept=".txt" required></label>
+    <div class="form-actions">
+      <button type="button" class="icon-action" data-dialog-close data-tooltip="Ακύρωση" aria-label="Ακύρωση">{{ icon('close') }}</button>
+      <button class="icon-action icon-action-primary" data-tooltip="Εξαγωγή" aria-label="Εξαγωγή">{{ icon('download') }}</button>
+    </div>
+  </form>
+</dialog>
 {% endblock %}

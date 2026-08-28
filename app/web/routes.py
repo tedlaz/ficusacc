@@ -40,7 +40,7 @@ from app.infrastructure.database.models import (
     UserCompanyAccessModel,
     UserModel,
 )
-from app.web import reports
+from app.web import journal_export, reports
 from app.web.auth import company_required, login_required, superuser_required
 from app.web.pdf_reports import build_report_pdf
 
@@ -735,6 +735,20 @@ def accounts_export():
                     headers={"Content-Disposition": "attachment; filename=chart_of_accounts.csv"})
 
 
+def text_download(text: str, filename: str) -> Response:
+    return Response(text.encode("utf-8"), mimetype="text/plain; charset=utf-8",
+                    headers={"Content-Disposition": f"attachment; filename={filename}"})
+
+
+@web.get("/accounts/export/mapping")
+@company_required
+def accounts_export_mapping():
+    accounts = list(get_db().exec(select(AccountModel).where(AccountModel.company_id == g.company.id)
+                                  .order_by(AccountModel.code)).all())
+    return text_download(journal_export.build_account_list(accounts),
+                         f"metatropi_{g.company.code}.txt")
+
+
 @web.post("/accounts/import")
 @company_required
 def accounts_import():
@@ -803,8 +817,10 @@ def transactions_index():
     )
     accounts = list(db.exec(select(AccountModel).where(AccountModel.company_id == g.company.id)).all())
     pagination = {"page": page, "pages": pages, "total": total}
+    export_end = date.today()
     return render_template("transactions/index.html", transactions=transactions,
-                           account_map={a.id: a for a in accounts}, pagination=pagination)
+                           account_map={a.id: a for a in accounts}, pagination=pagination,
+                           export_start=export_end - timedelta(days=365), export_end=export_end)
 
 
 @web.route("/transactions/new", methods=["GET", "POST"])
@@ -964,6 +980,43 @@ def transaction_delete(transaction_id):
     get_db().commit()
     flash("Η εγγραφή διαγράφηκε.", "success")
     return finish("web.transactions_index")
+
+
+@web.post("/transactions/export/journal")
+@company_required
+def transactions_export_journal():
+    uploaded = request.files.get("mapping")
+    if not uploaded or not uploaded.filename:
+        flash("Επιλέξτε το αρχείο μετατροπής.", "error")
+        return finish("web.transactions_index")
+    mapping = journal_export.parse_mapping(uploaded.read().decode("utf-8-sig"))
+    if not mapping:
+        flash("Το αρχείο μετατροπής δεν περιέχει αντιστοιχίσεις.", "error")
+        return finish("web.transactions_index")
+
+    end = parse_date(request.form.get("end_date"), date.today())
+    start = parse_date(request.form.get("start_date"), end - timedelta(days=365))
+    db = get_db()
+    transactions = [
+        transaction
+        for transaction in reports.transactions_between(db, g.company.id, start, end)
+        if transaction.is_posted
+    ]
+    transactions.sort(key=lambda item: (item.transaction_date, item.id))
+    if not transactions:
+        flash("Δεν υπάρχουν οριστικοποιημένες εγγραφές στο εύρος που επιλέξατε.", "error")
+        return finish("web.transactions_index")
+
+    accounts = db.exec(select(AccountModel).where(AccountModel.company_id == g.company.id)).all()
+    account_map = {account.id: account for account in accounts}
+    try:
+        content = journal_export.build_journal(transactions, account_map, mapping)
+    except journal_export.MissingMappingError as error:
+        flash(f"Λείπουν αντιστοιχίσεις για {len(error.codes)} λογαριασμούς: "
+              f"{', '.join(error.codes[:10])}"
+              f"{f' …και {len(error.codes) - 10} ακόμα' if len(error.codes) > 10 else ''}", "error")
+        return finish("web.transactions_index")
+    return text_download(content, f"journal_{start.isoformat()}_{end.isoformat()}.txt")
 
 
 # Reports

@@ -645,3 +645,98 @@ def bytes_io(value: str):
     from io import BytesIO
 
     return BytesIO(value.encode("utf-8"))
+
+
+def test_accounts_mapping_skeleton_export(client, csrf, logged_in):
+    for code, name in (("38.00.00", "Ταμείο μετρητά"), ("33.00", "Απαιτήσεις")):
+        assert client.post(
+            "/accounts/new",
+            data={"csrf_token": csrf, "code": code, "name": name, "account_type": "asset"},
+        ).status_code == 302
+
+    exported = client.get("/accounts/export/mapping")
+
+    assert exported.status_code == 200
+    assert "attachment; filename=metatropi_TEST.txt" in exported.headers["Content-Disposition"]
+    assert exported.data.decode("utf-8").split("\r\n")[:2] == [
+        "33.00     Απαιτήσεις",
+        "38.00.00  Ταμείο μετρητά",
+    ]
+
+
+def posted_transaction(client, csrf, app, company_id):
+    with Session(app.extensions["sqlmodel_engine"]) as db:
+        cash = AccountModel(company_id=company_id, code="38.00.00", name="Ταμείο",
+                            account_type="asset")
+        revenue = AccountModel(company_id=company_id, code="70.00.00", name="Έσοδα",
+                               account_type="revenue")
+        db.add(cash)
+        db.add(revenue)
+        db.commit()
+        db.refresh(cash)
+        db.refresh(revenue)
+        cash_id, revenue_id = cash.id, revenue.id
+
+    assert client.post(
+        "/transactions/new",
+        data={
+            "csrf_token": csrf,
+            "transaction_date": "19/01/2026",
+            "description": "Είσπραξη",
+            "reference": "110",
+            "account_id": [str(cash_id), str(revenue_id)],
+            "amount": ["122.40", "-122.40"],
+            "line_description": ["", ""],
+        },
+    ).status_code == 302
+    with Session(app.extensions["sqlmodel_engine"]) as db:
+        transaction_id = db.exec(select(TransactionModel)).one().id
+    assert client.post(
+        f"/transactions/{transaction_id}/post", data={"csrf_token": csrf}
+    ).status_code == 302
+
+
+def test_journal_export_produces_the_ledger_file(client, csrf, logged_in, app):
+    posted_transaction(client, csrf, app, logged_in[1])
+    mapping = "38.00.00  Ταμείο.Μετρητά\n70.00.00  Εσοδα.Κοινόχρηστα\n"
+
+    exported = client.post(
+        "/transactions/export/journal",
+        data={
+            "csrf_token": csrf,
+            "start_date": "01/01/2026",
+            "end_date": "31/12/2026",
+            "mapping": (bytes_io(mapping), "metatropi.txt"),
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert exported.status_code == 200
+    assert "filename=journal_2026-01-01_2026-12-31.txt" in exported.headers["Content-Disposition"]
+    assert exported.data.decode("utf-8") == (
+        "j-normal\r\n"
+        "\r\n"
+        "2026-01-19 {110} Είσπραξη\r\n"
+        "  Ταμείο.Μετρητά        122,40\r\n"
+        "  Εσοδα.Κοινόχρηστα\r\n"
+        "\r\n"
+    )
+
+
+def test_journal_export_stops_when_a_mapping_is_missing(client, csrf, logged_in, app):
+    posted_transaction(client, csrf, app, logged_in[1])
+
+    exported = client.post(
+        "/transactions/export/journal",
+        data={
+            "csrf_token": csrf,
+            "start_date": "01/01/2026",
+            "end_date": "31/12/2026",
+            "mapping": (bytes_io("38.00.00  Ταμείο.Μετρητά\n"), "metatropi.txt"),
+        },
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+
+    assert exported.status_code == 200
+    assert "70.00.00" in exported.text
