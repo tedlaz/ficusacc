@@ -607,7 +607,7 @@ def test_trial_balance_builds_dotted_account_summary_levels(client, logged_in, a
 
 
 def test_form_actions_are_icon_only(client, logged_in):
-    for url in ("/accounts/new", "/companies/new", "/users/new", "/profile/password", "/reports"):
+    for url in ("/accounts/new", "/companies/new", "/users/new", "/profile/password", "/reports", "/transactions/quick"):
         page = client.get(url)
         assert page.status_code == 200
         assert 'class="button' not in page.text
@@ -740,3 +740,114 @@ def test_journal_export_stops_when_a_mapping_is_missing(client, csrf, logged_in,
 
     assert exported.status_code == 200
     assert "70.00.00" in exported.text
+
+
+def _quick_accounts(app, company_id, inactive=False):
+    with Session(app.extensions["sqlmodel_engine"]) as db:
+        cash = AccountModel(company_id=company_id, code="38.00", name="Ταμείο", account_type="asset")
+        revenue = AccountModel(company_id=company_id, code="70.00", name="Πωλήσεις", account_type="revenue",
+                               is_active=not inactive)
+        db.add(cash)
+        db.add(revenue)
+        db.commit()
+        db.refresh(cash)
+        db.refresh(revenue)
+        return cash.id, revenue.id
+
+
+def _quick_payload(csrf, cash_id, revenue_id, **overrides):
+    payload = {
+        "csrf_token": csrf,
+        "mode": "draft",
+        "row_date": ["15/01/2026", "16/01/2026", "16/01/2026", "16/01/2026"],
+        "row_description": ["Είσπραξη Α", "Είσπραξη Β", "", ""],
+        "row_debit": [str(cash_id), str(cash_id), "", ""],
+        "row_credit": [str(revenue_id), str(revenue_id), "", ""],
+        "row_amount": ["10", "20.50", "", ""],
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _transactions(app):
+    with Session(app.extensions["sqlmodel_engine"]) as db:
+        items = list(db.exec(select(TransactionModel).order_by(TransactionModel.id)).all())
+        lines = {item.id: list(db.exec(select(TransactionLineModel)
+                                       .where(TransactionLineModel.transaction_id == item.id)
+                                       .order_by(TransactionLineModel.line_order)).all()) for item in items}
+        return [(item.description, item.transaction_date, item.is_posted,
+                 [(line.account_id, line.amount) for line in lines[item.id]]) for item in items]
+
+
+def test_quick_entry_page_and_link(client, logged_in):
+    listing = client.get("/transactions")
+    assert 'data-tooltip="Γρήγορη καταχώριση"' in listing.text
+    assert 'href="/transactions/quick"' in listing.text
+    page = client.get("/transactions/quick")
+    assert page.status_code == 200
+    assert "data-quick-form" in page.text
+    assert page.text.count("data-quick-row>") == 2  # 1 row + the template
+    assert 'data-tooltip="Αποθήκευση πρόχειρων"' in page.text
+    assert 'data-tooltip="Οριστικοποίηση όλων"' in page.text
+    assert 'name="mode" value="post"' in page.text
+
+
+def test_quick_entry_saves_drafts(client, csrf, logged_in, app):
+    cash_id, revenue_id = _quick_accounts(app, logged_in[1])
+    response = client.post("/transactions/quick", data=_quick_payload(csrf, cash_id, revenue_id))
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/transactions")
+    saved = _transactions(app)
+    assert saved == [
+        ("Είσπραξη Α", date(2026, 1, 15), False, [(cash_id, 10), (revenue_id, -10)]),
+        ("Είσπραξη Β", date(2026, 1, 16), False, [(cash_id, 20.50), (revenue_id, -20.50)]),
+    ]
+    listing = client.get("/transactions")
+    assert "Αποθηκεύτηκαν 2 εγγραφές." in listing.text
+    assert listing.text.count("data-transaction-row") == 2
+
+
+def test_quick_entry_posts_all(client, csrf, logged_in, app):
+    cash_id, revenue_id = _quick_accounts(app, logged_in[1])
+    response = client.post("/transactions/quick", data=_quick_payload(csrf, cash_id, revenue_id, mode=["draft", "post"]),
+                           headers={"HX-Request": "true"})
+    assert response.status_code == 200
+    assert response.headers["HX-Redirect"] == "/transactions"
+    assert [item[2] for item in _transactions(app)] == [True, True]
+    assert "Οριστικοποιήθηκαν 2 εγγραφές." in client.get("/transactions").text
+
+
+def test_quick_entry_is_all_or_nothing(client, csrf, logged_in, app):
+    cash_id, revenue_id = _quick_accounts(app, logged_in[1])
+    response = client.post("/transactions/quick", data=_quick_payload(
+        csrf, cash_id, revenue_id,
+        row_date=["15/01/2026", "16/01/2026", "31/02/2026", "17/01/2026", "18/01/2026"],
+        row_description=["Έγκυρη γραμμή", "Ίδιος λογαριασμός", "Κακή ημερομηνία", "", "Αρνητικό ποσό"],
+        row_debit=[str(cash_id), str(cash_id), str(cash_id), str(cash_id), str(cash_id)],
+        row_credit=[str(revenue_id), str(cash_id), str(revenue_id), str(revenue_id), str(revenue_id)],
+        row_amount=["10", "5", "5", "5", "-5"],
+    ))
+    assert response.status_code == 422
+    assert _transactions(app) == []
+    assert "Δεν αποθηκεύτηκε καμία εγγραφή." in response.text
+    assert 'value="Έγκυρη γραμμή"' in response.text
+    form = response.text.split("data-quick-form", 1)[1]
+    assert form.count(f'value="{cash_id}" selected') == 6
+    assert "ο ίδιος λογαριασμός" in response.text
+    assert "Μη έγκυρη ημερομηνία." in response.text
+    assert "Απαιτείται περιγραφή." in response.text
+    assert "Το ποσό πρέπει να είναι θετικό." in response.text
+    assert response.text.count("quick-row has-error") == 4
+
+
+def test_quick_entry_rejects_empty_and_inactive(client, csrf, logged_in, app):
+    cash_id, revenue_id = _quick_accounts(app, logged_in[1], inactive=True)
+    empty = client.post("/transactions/quick", data={"csrf_token": csrf, "row_date": ["15/01/2026", "15/01/2026"],
+                                                     "row_description": ["", ""], "row_debit": ["", ""],
+                                                     "row_credit": ["", ""], "row_amount": ["", ""]})
+    assert empty.status_code == 422
+    assert "Δεν υπάρχουν συμπληρωμένες γραμμές." in empty.text
+    inactive = client.post("/transactions/quick", data=_quick_payload(csrf, cash_id, revenue_id))
+    assert inactive.status_code == 422
+    assert "δεν είναι ενεργός" in inactive.text
+    assert _transactions(app) == []

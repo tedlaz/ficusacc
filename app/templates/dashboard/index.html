@@ -11,16 +11,16 @@
   <a class="icon-action icon-action-primary icon-action-large" href="{{ url_for('web.transaction_new') }}" data-modal-url="{{ url_for('web.transaction_new') }}" data-tooltip="Νέα εγγραφή" aria-label="Νέα εγγραφή">{{ icon('plus') }}</a>
 </header>
 {% if not g.company %}
-<section class="empty-state"><span>00</span><h2>Ξεκινήστε με μία εταιρεία</h2><p>Δημιουργήστε ή επιλέξτε εταιρεία για να εμφανιστούν τα οικονομικά δεδομένα.</p><a class="icon-action icon-action-primary icon-action-large" href="{{ url_for('web.company_new') }}" data-modal-url="{{ url_for('web.company_new') }}" data-tooltip="Νέα εταιρεία" aria-label="Νέα εταιρεία">{{ icon('plus') }}</a></section>
+<section class="empty-state"><span>{{ icon('building') }}</span><h2>Ξεκινήστε με μία εταιρεία</h2><p>Δημιουργήστε ή επιλέξτε εταιρεία για να εμφανιστούν τα οικονομικά δεδομένα.</p><a class="icon-action icon-action-primary icon-action-large" href="{{ url_for('web.company_new') }}" data-modal-url="{{ url_for('web.company_new') }}" data-tooltip="Νέα εταιρεία" aria-label="Νέα εταιρεία">{{ icon('plus') }}</a></section>
 {% else %}
 <section class="panel cash-chart-panel" data-cash-chart>
   <header>
     <div><p class="eyebrow">Τελευταίοι 12 μήνες</p><h2>Πορεία ταμιακών διαθεσίμων</h2></div>
     <div class="cash-chart-summary">
       <span>Τρέχον υπόλοιπο</span>
-      <strong>{{ cash_total|money }}</strong>
-      <small class="{{ 'positive' if cash_chart.change > 0 else 'negative' if cash_chart.change < 0 else '' }}">
-        {{ '+' if cash_chart.change > 0 else '' }}{{ cash_chart.change|money }} από τον προηγούμενο μήνα
+      <strong data-countup>{{ cash_total|money }}</strong>
+      <small class="trend {{ 'positive' if cash_chart.change > 0 else 'negative' if cash_chart.change < 0 else '' }}">
+        {% if cash_chart.change > 0 %}{{ icon('trend-up') }}{% elif cash_chart.change < 0 %}{{ icon('trend-down') }}{% endif %}{{ '+' if cash_chart.change > 0 else '' }}{{ cash_chart.change|money }} από τον προηγούμενο μήνα
       </small>
     </div>
   </header>
@@ -30,8 +30,13 @@
       <desc id="cash-chart-description">Γραμμικό διάγραμμα του συνολικού υπολοίπου των λογαριασμών 38 για τους τελευταίους 12 μήνες.</desc>
       <defs>
         <linearGradient id="cash-chart-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#1f5c48" stop-opacity=".22"/>
-          <stop offset="100%" stop-color="#1f5c48" stop-opacity=".01"/>
+          <stop offset="0%" stop-color="#19b3a0" stop-opacity=".28"/>
+          <stop offset="100%" stop-color="#8b5cf6" stop-opacity=".02"/>
+        </linearGradient>
+        <linearGradient id="cash-chart-stroke" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#f59e0b"/>
+          <stop offset="55%" stop-color="#19b3a0"/>
+          <stop offset="100%" stop-color="#6d3fc4"/>
         </linearGradient>
         <filter id="cash-chart-glow" x="-100%" y="-100%" width="300%" height="300%">
           <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#17211d" flood-opacity=".16"/>
@@ -43,7 +48,7 @@
       {% endfor %}
       <line class="chart-zero-line" x1="76" x2="938" y1="{{ cash_chart.zero_y }}" y2="{{ cash_chart.zero_y }}"/>
       <path class="chart-area" d="{{ cash_chart.area_path }}"/>
-      <path class="chart-line" d="{{ cash_chart.line_path }}"/>
+      <path class="chart-line" pathLength="1" d="{{ cash_chart.line_path }}"/>
       {% for point in cash_chart.points %}
       <g class="chart-point" data-month="{{ point.item.month.strftime('%Y-%m') }}" data-balance="{{ '%.2f'|format(point.item.balance) }}" tabindex="0" role="img" aria-label="{{ point.label }} {{ point.item.month.year }}: {{ point.item.balance|money }}">
         <circle class="chart-point-halo" cx="{{ point.x }}" cy="{{ point.y }}" r="10"/>
@@ -57,16 +62,16 @@
 </section>
 <section class="split-grid">
   <article class="panel">
-    <header><div><p class="eyebrow">Λογαριασμοί 38*</p><h2>Ταμιακά διαθέσιμα</h2></div><a href="{{ url_for('web.accounts_index') }}">Όλοι →</a></header>
+    <header><div><p class="eyebrow">Λογαριασμοί 38*</p><h2>Ταμιακά διαθέσιμα</h2></div><a href="{{ url_for('web.accounts_index') }}" class="panel-link">Όλοι {{ icon('arrow-right') }}</a></header>
     <div class="compact-list cash-list">
       {% for item in cash_accounts %}
       <div><a class="code account-link" href="{{ url_for('web.account_ledger', account_id=item.account.id) }}">{{ item.account.code }}</a><a class="account-link" href="{{ url_for('web.account_ledger', account_id=item.account.id) }}"><strong>{{ item.account.name }}</strong></a><strong class="amount">{{ item.balance|money }}</strong></div>
       {% else %}<p class="muted">Δεν υπάρχουν λογαριασμοί που ξεκινούν από 38.</p>{% endfor %}
-      <div class="cash-total-row"><span></span><strong>Σύνολο</strong><strong class="amount">{{ cash_total|money }}</strong></div>
+      <div class="cash-total-row"><span class="total-mark">{{ icon('wallet') }}</span><strong>Σύνολο</strong><strong class="amount" data-countup>{{ cash_total|money }}</strong></div>
     </div>
   </article>
   <article class="panel">
-    <header><div><p class="eyebrow">Με σειρά εισόδου</p><h2>Τελευταίες εγγραφές</h2></div><a href="{{ url_for('web.transactions_index') }}">Όλες →</a></header>
+    <header><div><p class="eyebrow">Με σειρά εισόδου</p><h2>Τελευταίες εγγραφές</h2></div><a href="{{ url_for('web.transactions_index') }}" class="panel-link">Όλες {{ icon('arrow-right') }}</a></header>
     <div class="compact-list transactions">
       {% for item in transactions %}
       <div data-dashboard-transaction><time>{{ item.transaction_date|dategr }}</time><strong>{{ item.description }}</strong><span class="badge {{ 'posted' if item.is_posted else 'draft' }}">{{ 'Οριστική' if item.is_posted else 'Πρόχειρη' }}</span><a class="icon-action" href="{{ url_for('web.transaction_view', transaction_id=item.id) }}" data-modal-url="{{ url_for('web.transaction_view', transaction_id=item.id) }}" data-transaction-preview-url="{{ url_for('web.transaction_preview', transaction_id=item.id) }}" data-tooltip="Προβολή εγγραφής" aria-label="Προβολή εγγραφής">{{ icon('eye') }}</a></div>

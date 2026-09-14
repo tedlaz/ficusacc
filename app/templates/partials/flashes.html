@@ -1,7 +1,7 @@
 {% with messages = get_flashed_messages(with_categories=true) %}
   {% if messages %}
     <div class="flash-stack" aria-live="polite">
-      {% for category, message in messages %}<div class="flash flash-{{ category }}">{{ message }}<button type="button" aria-label="Κλείσιμο" onclick="this.parentElement.remove()">×</button></div>{% endfor %}
+      {% for category, message in messages %}<div class="flash flash-{{ category }}" data-flash><svg class="ui-icon flash-icon" aria-hidden="true"><use href="#icon-{{ {'success': 'check-circle', 'error': 'x-circle', 'warning': 'alert'}.get(category, 'info') }}"></use></svg><span class="flash-text">{{ message }}</span><button type="button" aria-label="Κλείσιμο" data-flash-close><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button></div>{% endfor %}
     </div>
   {% endif %}
 {% endwith %}

@@ -1,9 +1,11 @@
 const csrfToken = () => document.querySelector('meta[name="csrf-token"]')?.content || ''
+const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
 let transactionPreviewTimer
 let transactionPreviewHideTimer
 let transactionPreviewController
 let transactionPreviewElement
 
+/* ---------- modal links ---------- */
 document.addEventListener('click', async (event) => {
   const link = event.target.closest('[data-modal-url]')
   if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
@@ -13,6 +15,7 @@ document.addEventListener('click', async (event) => {
   await openModal(link.dataset.modalUrl)
 }, true)
 
+/* ---------- transaction hover preview ---------- */
 document.addEventListener('mouseover', (event) => {
   const trigger = event.target.closest('[data-transaction-preview-url]')
   if (!trigger || trigger.contains(event.relatedTarget)) return
@@ -29,6 +32,7 @@ document.addEventListener('mouseout', (event) => {
   scheduleTransactionPreviewHide()
 })
 
+/* ---------- ajax forms (modal + row actions) ---------- */
 document.addEventListener('submit', async (event) => {
   const form = event.target
   const isTransactionAction = form.matches('[data-transaction-action]')
@@ -40,7 +44,11 @@ document.addEventListener('submit', async (event) => {
   if (form.dataset.confirm && !window.confirm(form.dataset.confirm)) return
 
   const submitter = event.submitter
-  if (submitter) submitter.disabled = true
+  if (submitter) {
+    submitter.disabled = true
+    submitter.classList.add('is-busy')
+  }
+  const row = isTransactionAction ? form.closest('tr, [data-dashboard-transaction]') : null
   try {
     const response = await fetch(form.action, {
       method: (form.method || 'post').toUpperCase(),
@@ -50,10 +58,13 @@ document.addEventListener('submit', async (event) => {
     })
     const redirect = response.headers.get('HX-Redirect')
     if (redirect) {
+      startNavProgress()
+      if (row && form.action.endsWith('/delete')) row.classList.add('is-leaving')
       window.location.assign(redirect)
       return
     }
     if (response.redirected) {
+      startNavProgress()
       window.location.assign(response.url)
       return
     }
@@ -61,14 +72,25 @@ document.addEventListener('submit', async (event) => {
     if (isModalForm) {
       const root = document.querySelector('#modal-root')
       root.innerHTML = html
-      updateBalance(root.querySelector('form'))
+      const panel = root.querySelector('.modal-panel')
+      panel?.classList.add('no-enter')
+      const rerendered = root.querySelector('form')
+      if (rerendered && !response.ok) {
+        rerendered.classList.add('is-invalid')
+        rerendered.addEventListener('animationend', () => rerendered.classList.remove('is-invalid'), { once: true })
+      }
+      updateBalance(rerendered)
+      enhance(root)
     } else if (!response.ok) {
       window.alert('Η ενέργεια δεν ολοκληρώθηκε. Δοκιμάστε ξανά.')
     }
   } catch (_error) {
     window.alert('Δεν ήταν δυνατή η επικοινωνία με την εφαρμογή.')
   } finally {
-    if (submitter) submitter.disabled = false
+    if (submitter) {
+      submitter.disabled = false
+      submitter.classList.remove('is-busy')
+    }
   }
 }, true)
 
@@ -76,6 +98,7 @@ document.addEventListener('htmx:configRequest', (event) => {
   event.detail.headers['X-CSRFToken'] = csrfToken()
 })
 
+/* ---------- generic click handling ---------- */
 document.addEventListener('click', (event) => {
   const drawerToggle = event.target.closest('[data-drawer-toggle]')
   const drawerClose = event.target.closest('[data-drawer-close]')
@@ -84,6 +107,9 @@ document.addEventListener('click', (event) => {
 
   const modalClose = event.target.closest('[data-modal-close]')
   if (modalClose) closeModal()
+
+  const flashClose = event.target.closest('[data-flash-close]')
+  if (flashClose) dismissFlash(flashClose.closest('[data-flash]'))
 
   const opener = event.target.closest('[data-open]')
   if (opener) document.getElementById(opener.dataset.open)?.showModal()
@@ -111,29 +137,137 @@ document.addEventListener('click', (event) => {
       return
     }
     const parameters = new URLSearchParams(new FormData(controls))
+    pdfExport.classList.add('is-busy')
+    window.setTimeout(() => pdfExport.classList.remove('is-busy'), 2500)
     window.location.assign(`${pdfExport.dataset.pdfUrl}?${parameters}`)
   }
 
   const remove = event.target.closest('[data-remove-line]')
   if (remove) {
     const lines = remove.closest('[data-entry-lines]')
-    if (lines.children.length > 2) remove.closest('.entry-line').remove()
+    const line = remove.closest('.entry-line')
+    if (lines.children.length > 2) {
+      const form = lines.closest('form')
+      if (reducedMotion()) {
+        line.remove()
+        updateBalance(form)
+      } else {
+        line.style.maxHeight = `${line.offsetHeight}px`
+        line.classList.add('is-removing')
+        line.addEventListener('animationend', () => {
+          line.remove()
+          updateBalance(form)
+        }, { once: true })
+      }
+    }
     updateBalance(lines.closest('form'))
   }
 
   const add = event.target.closest('[data-add-line]')
   if (add) {
     const form = add.closest('form')
-    form.querySelector('[data-entry-lines]').append(form.querySelector('[data-line-template]').content.cloneNode(true))
+    const lines = form.querySelector('[data-entry-lines]')
+    lines.append(form.querySelector('[data-line-template]').content.cloneNode(true))
+    lines.lastElementChild?.querySelector('select')?.focus()
     updateBalance(form)
   }
 }, true)
 
+/* ---------- quick entry (many two-line transactions) ---------- */
+const QUICK_INHERITED_FIELDS = ['row_date', 'row_debit', 'row_credit']
+
+function addQuickRow(form, previous) {
+  const rows = form.querySelector('[data-quick-rows]')
+  const fragment = form.querySelector('[data-quick-template]').content.cloneNode(true)
+  const row = fragment.querySelector('[data-quick-row]')
+  const source = previous || rows.lastElementChild
+  if (source) {
+    QUICK_INHERITED_FIELDS.forEach((name) => {
+      const from = source.querySelector(`[name="${name}"]`)
+      const to = row.querySelector(`[name="${name}"]`)
+      if (from && to && from.value) to.value = from.value
+    })
+  }
+  const dateInput = row.querySelector('[data-greek-date]')
+  if (dateInput) validateGreekDate(dateInput)
+  rows.append(fragment)
+  updateQuickTotals(form)
+  rows.lastElementChild.querySelector('[data-quick-description]')?.focus()
+}
+
+function updateQuickTotals(form) {
+  if (!form) return
+  const rows = [...form.querySelectorAll('[data-quick-row]')]
+  const filled = rows.filter((row) => ['row_description', 'row_debit', 'row_credit', 'row_amount']
+    .some((name) => row.querySelector(`[name="${name}"]`)?.value.trim()))
+  const total = filled.reduce((sum, row) => sum + (Number(row.querySelector('[name="row_amount"]')?.value) || 0), 0)
+  form.querySelector('[data-quick-count]').textContent = filled.length
+  form.querySelector('[data-quick-total]').textContent = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(total)
+  form.querySelectorAll('[data-quick-remove]').forEach((button) => { button.disabled = rows.length <= 1 })
+}
+
+document.addEventListener('click', (event) => {
+  const add = event.target.closest('[data-quick-add]')
+  if (add) addQuickRow(add.closest('[data-quick-form]'))
+  const remove = event.target.closest('[data-quick-remove]')
+  if (remove) {
+    const form = remove.closest('[data-quick-form]')
+    const row = remove.closest('[data-quick-row]')
+    if (form.querySelectorAll('[data-quick-row]').length > 1) {
+      row.remove()
+      updateQuickTotals(form)
+    }
+  }
+}, true)
+
+document.addEventListener('input', (event) => {
+  const form = event.target.closest?.('[data-quick-form]')
+  if (form) updateQuickTotals(form)
+})
+
+document.addEventListener('change', (event) => {
+  const form = event.target.closest?.('[data-quick-form]')
+  if (form) updateQuickTotals(form)
+}, true)
+
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter' || !event.target.matches?.('[data-quick-amount]')) return
+  event.preventDefault()
+  const form = event.target.closest('[data-quick-form]')
+  const row = event.target.closest('[data-quick-row]')
+  if (row === form.querySelector('[data-quick-rows]').lastElementChild) addQuickRow(form, row)
+  else row.nextElementSibling?.querySelector('[data-quick-description]')?.focus()
+})
+
+/* ---------- ripple feedback ---------- */
+document.addEventListener('pointerdown', (event) => {
+  if (event.button !== 0 || reducedMotion()) return
+  const host = event.target.closest('.icon-action, .button, .main-nav a, .page-arrow, .action-tile, .sidebar-icon')
+  if (!host || host.matches(':disabled, .disabled')) return
+  let layer = host.querySelector(':scope > .ripple-layer')
+  if (!layer) {
+    layer = document.createElement('span')
+    layer.className = 'ripple-layer'
+    host.prepend(layer)
+  }
+  const box = host.getBoundingClientRect()
+  const size = Math.max(box.width, box.height)
+  const ripple = document.createElement('span')
+  ripple.className = 'ripple'
+  ripple.style.setProperty('--ripple-size', `${size}px`)
+  ripple.style.left = `${event.clientX - box.left - size / 2}px`
+  ripple.style.top = `${event.clientY - box.top - size / 2}px`
+  layer.append(ripple)
+  ripple.addEventListener('animationend', () => ripple.remove(), { once: true })
+})
+
+/* ---------- native form confirms ---------- */
 document.addEventListener('submit', (event) => {
   const message = event.target.dataset.confirm
   if (message && !window.confirm(message)) event.preventDefault()
 })
 
+/* ---------- inputs ---------- */
 document.addEventListener('input', (event) => {
   if (event.target.matches('[data-greek-date]')) {
     event.target.value = formatGreekDateInput(event.target.value)
@@ -147,6 +281,11 @@ document.addEventListener('blur', (event) => {
 }, true)
 
 document.addEventListener('change', (event) => {
+  if (event.target.matches('.file-drop input[type="file"]')) {
+    const drop = event.target.closest('.file-drop')
+    drop.classList.toggle('has-file', event.target.files.length > 0)
+    return
+  }
   if (event.target.matches('[data-native-date]')) {
     event.stopPropagation()
     const visibleInput = event.target.closest('.date-input-wrap').querySelector('[data-greek-date]')
@@ -167,6 +306,37 @@ document.addEventListener('change', (event) => {
   form.querySelector('[data-ledger]').hidden = reportType !== 'general_ledger'
 }, true)
 
+/* file drop zones: drag feedback */
+document.addEventListener('dragover', (event) => {
+  const drop = event.target.closest('.file-drop')
+  if (!drop) return
+  event.preventDefault()
+  drop.classList.add('is-dragover')
+})
+document.addEventListener('dragleave', (event) => {
+  const drop = event.target.closest('.file-drop')
+  if (drop && !drop.contains(event.relatedTarget)) drop.classList.remove('is-dragover')
+})
+document.addEventListener('drop', (event) => {
+  const drop = event.target.closest('.file-drop')
+  if (!drop) return
+  event.preventDefault()
+  drop.classList.remove('is-dragover')
+  const input = drop.querySelector('input[type="file"]')
+  if (input && event.dataTransfer?.files?.length) {
+    input.files = event.dataTransfer.files
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+  }
+})
+
+/* ---------- htmx lifecycle ---------- */
+document.addEventListener('htmx:beforeRequest', () => startNavProgress())
+document.addEventListener('htmx:afterSettle', () => finishNavProgress())
+document.addEventListener('htmx:responseError', () => finishNavProgress())
+document.addEventListener('htmx:sendError', () => finishNavProgress())
+document.addEventListener('htmx:timeout', () => finishNavProgress())
+window.addEventListener('pageshow', () => finishNavProgress())
+
 document.addEventListener('htmx:afterSwap', (event) => {
   if (event.detail.target.id === 'modal-root') {
     document.body.classList.add('modal-open')
@@ -179,7 +349,35 @@ document.addEventListener('htmx:afterSwap', (event) => {
 
 document.addEventListener('htmx:beforeSwap', (event) => {
   if (event.detail.target.id === 'modal-root' && event.detail.xhr.status >= 400) event.detail.shouldSwap = true
+  // Boosted navigation swaps only the main column, keeping the sidebar in place. Select/swap are applied
+  // here rather than as inherited hx-select/hx-swap attributes so partial requests (reports) are unaffected.
+  if (event.detail.target.id === 'page-content') {
+    event.detail.selectOverride = '#page-content'
+    event.detail.swapOverride = 'outerHTML show:window:top'
+  }
+  // Validation re-renders (422) of boosted page forms swap in place like a normal page.
+  if (event.detail.target.id === 'page-content' && event.detail.xhr.status === 422) {
+    event.detail.shouldSwap = true
+    event.detail.isError = false
+  }
+  // Content-only swaps need a page shell in the response; otherwise (login page, error page) do a full navigation.
+  if (event.detail.target.id === 'page-content' && !event.detail.xhr.responseText.includes('id="page-content"')) {
+    event.detail.shouldSwap = false
+    finishNavProgress()
+    window.location.assign(event.detail.xhr.responseURL || event.detail.pathInfo?.finalRequestPath || window.location.href)
+  }
 })
+
+document.addEventListener('htmx:afterSettle', (event) => {
+  if (event.detail.target.id === 'page-content') {
+    syncShell()
+    document.body.classList.remove('drawer-open')
+  }
+})
+window.addEventListener('popstate', () => window.setTimeout(syncShell, 0))
+
+document.addEventListener('htmx:load', (event) => enhance(event.detail.elt))
+document.addEventListener('DOMContentLoaded', () => enhance(document))
 
 document.addEventListener('cancel', (event) => {
   if (event.target.matches('dialog')) event.preventDefault()
@@ -193,6 +391,93 @@ document.addEventListener('keydown', (event) => {
   }
 }, true)
 
+/* ---------- keep sidebar + accent in sync with the swapped page ---------- */
+function syncShell() {
+  const main = document.getElementById('page-content')
+  if (!main) return
+  if (main.dataset.section) document.body.dataset.section = main.dataset.section
+  const path = window.location.pathname
+  document.querySelectorAll('.main-nav a[data-nav]').forEach((link) => {
+    const href = link.getAttribute('href')
+    const active = href === '/' ? path === '/' : path === href || path.startsWith(`${href}/`)
+    link.classList.toggle('active', active)
+  })
+}
+
+/* ---------- progressive enhancement of swapped content ---------- */
+function enhance(root) {
+  if (!root?.querySelectorAll) return
+  root.querySelectorAll('[data-countup]:not([data-enhanced])').forEach((element) => {
+    element.dataset.enhanced = 'true'
+    countUp(element)
+  })
+  root.querySelectorAll?.('[data-quick-form]').forEach(updateQuickTotals)
+  root.querySelectorAll('[data-flash]:not([data-enhanced])').forEach((flash) => {
+    flash.dataset.enhanced = 'true'
+    scheduleFlashDismiss(flash)
+  })
+}
+
+function countUp(element) {
+  if (reducedMotion()) return
+  const text = element.textContent.trim()
+  const match = text.match(/^(-?)([\d.]+),(\d{2})(.*)$/)
+  if (!match) return
+  const [, sign, whole, cents, suffix] = match
+  const target = Number(`${whole.replace(/\./g, '')}.${cents}`)
+  if (!Number.isFinite(target) || target === 0) return
+  const formatter = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const duration = 900
+  const start = performance.now()
+  const frame = (now) => {
+    const progress = Math.min(1, (now - start) / duration)
+    const eased = 1 - Math.pow(1 - progress, 4)
+    element.textContent = `${sign}${formatter.format(target * eased)}${suffix}`
+    if (progress < 1) window.requestAnimationFrame(frame)
+    else element.textContent = text
+  }
+  window.requestAnimationFrame(frame)
+}
+
+/* ---------- flashes ---------- */
+function scheduleFlashDismiss(flash) {
+  const life = flash.classList.contains('flash-error') ? 9000 : 6000
+  flash.style.setProperty('--flash-life', `${life}ms`)
+  let timer = window.setTimeout(() => dismissFlash(flash), life)
+  flash.addEventListener('mouseenter', () => window.clearTimeout(timer))
+  flash.addEventListener('mouseleave', () => { timer = window.setTimeout(() => dismissFlash(flash), 2500) })
+}
+
+function dismissFlash(flash) {
+  if (!flash || flash.classList.contains('is-leaving')) return
+  if (reducedMotion()) {
+    flash.remove()
+    return
+  }
+  flash.classList.add('is-leaving')
+  flash.addEventListener('animationend', () => flash.remove(), { once: true })
+}
+
+/* ---------- navigation progress bar ---------- */
+let navProgressTimer
+function startNavProgress() {
+  const bar = document.querySelector('[data-nav-progress]')
+  if (!bar) return
+  window.clearTimeout(navProgressTimer)
+  bar.classList.remove('is-done')
+  void bar.offsetWidth
+  bar.classList.add('is-loading')
+}
+
+function finishNavProgress() {
+  const bar = document.querySelector('[data-nav-progress]')
+  if (!bar || !bar.classList.contains('is-loading')) return
+  bar.classList.remove('is-loading')
+  bar.classList.add('is-done')
+  navProgressTimer = window.setTimeout(() => bar.classList.remove('is-done'), 500)
+}
+
+/* ---------- transaction balance ---------- */
 function updateBalance(form) {
   if (!form?.matches('[data-transaction-form]')) return
   syncAutoBalance(form)
@@ -203,7 +488,12 @@ function updateBalance(form) {
   form.querySelector('[data-credits]').textContent = credits.toFixed(2)
   const balanced = Math.abs(debits - credits) < 0.01
   const state = form.querySelector('[data-balance-state]')
-  state.textContent = balanced ? 'Ισοσκελισμένη' : `Διαφορά ${(debits - credits).toFixed(2)}`
+  const text = state.querySelector('[data-balance-text]') || state
+  text.textContent = balanced ? 'Ισοσκελισμένη' : `Διαφορά ${(debits - credits).toFixed(2)}`
+  if (state.classList.contains('unbalanced') === balanced) {
+    state.classList.add('is-flipping')
+    window.setTimeout(() => state.classList.remove('is-flipping'), 250)
+  }
   state.classList.toggle('unbalanced', !balanced)
   form.querySelector('[data-save-transaction]').disabled = !balanced
 }
@@ -231,6 +521,7 @@ function syncAutoBalance(form) {
   lastInput.setAttribute('aria-label', 'Ποσό αυτόματης εξισορρόπησης')
 }
 
+/* ---------- modal ---------- */
 async function openModal(url) {
   const root = document.querySelector('#modal-root')
   if (!root) return
@@ -244,7 +535,8 @@ async function openModal(url) {
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     root.innerHTML = await response.text()
     updateBalance(root.querySelector('form'))
-    root.querySelector('input:not([type="hidden"]), select, button')?.focus()
+    enhance(root)
+    root.querySelector('input:not([type="hidden"]), select, button')?.focus({ preventScroll: true })
   } catch (_error) {
     closeModal()
     window.alert('Δεν ήταν δυνατό το άνοιγμα της φόρμας.')
@@ -253,10 +545,25 @@ async function openModal(url) {
 
 function closeModal() {
   const root = document.querySelector('#modal-root')
-  if (root) root.innerHTML = ''
-  document.body.classList.remove('modal-open')
+  if (!root) return
+  const modal = root.querySelector('[data-modal]')
+  const finish = () => {
+    root.innerHTML = ''
+    document.body.classList.remove('modal-open')
+  }
+  if (!modal || reducedMotion() || modal.classList.contains('is-closing')) {
+    if (!modal?.classList.contains('is-closing')) finish()
+    return
+  }
+  modal.classList.add('is-closing')
+  const panel = modal.querySelector('.modal-panel')
+  let done = false
+  const once = () => { if (!done) { done = true; finish() } }
+  panel?.addEventListener('animationend', once, { once: true })
+  window.setTimeout(once, 260)
 }
 
+/* ---------- transaction preview popover ---------- */
 async function showTransactionPreview(trigger) {
   transactionPreviewController?.abort()
   transactionPreviewController = new AbortController()
@@ -313,6 +620,7 @@ function hideTransactionPreview() {
 window.addEventListener('scroll', hideTransactionPreview, true)
 window.addEventListener('resize', hideTransactionPreview)
 
+/* ---------- greek dates ---------- */
 function formatGreekDateInput(value) {
   const digits = value.replace(/\D/g, '').slice(0, 8)
   if (digits.length <= 2) return digits

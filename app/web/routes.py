@@ -865,6 +865,96 @@ def active_accounts():
                               .order_by(AccountModel.code)).all())
 
 
+QUICK_ROWS_DEFAULT = 1
+QUICK_ROW_FIELDS = ("row_date", "row_description", "row_debit", "row_credit", "row_amount")
+
+
+def blank_quick_row():
+    return {"date": date.today().strftime("%d/%m/%Y"), "description": "", "debit": "", "credit": "",
+            "amount": "", "error": None}
+
+
+def parse_quick_rows(form, accounts):
+    """Validate the quick-entry rows. Returns (rows echoed to the template, parsed rows to persist)."""
+    account_ids = {account.id for account in accounts}
+    values = {name: form.getlist(name) for name in QUICK_ROW_FIELDS}
+    count = max((len(items) for items in values.values()), default=0)
+    rows, parsed = [], []
+
+    def cell(name, index):
+        return values[name][index].strip() if index < len(values[name]) else ""
+
+    for index in range(count):
+        row = {"date": cell("row_date", index), "description": cell("row_description", index),
+               "debit": cell("row_debit", index), "credit": cell("row_credit", index),
+               "amount": cell("row_amount", index), "error": None}
+        rows.append(row)
+        if not (row["description"] or row["debit"] or row["credit"] or row["amount"]):
+            continue  # untouched row (an inherited date alone does not count)
+        try:
+            when = parse_date(row["date"])
+        except ValueError:
+            row["error"] = "Μη έγκυρη ημερομηνία."
+            continue
+        if not row["description"]:
+            row["error"] = "Απαιτείται περιγραφή."
+            continue
+        try:
+            debit, credit = int(row["debit"]), int(row["credit"])
+        except ValueError:
+            row["error"] = "Επιλέξτε λογαριασμό χρέωσης και πίστωσης."
+            continue
+        if debit not in account_ids or credit not in account_ids:
+            row["error"] = "Ο λογαριασμός δεν είναι ενεργός."
+            continue
+        if debit == credit:
+            row["error"] = "Χρέωση και πίστωση δεν μπορεί να είναι ο ίδιος λογαριασμός."
+            continue
+        try:
+            amount = Decimal(row["amount"].replace(",", "."))
+        except InvalidOperation:
+            row["error"] = "Μη έγκυρο ποσό."
+            continue
+        if amount <= 0:
+            row["error"] = "Το ποσό πρέπει να είναι θετικό."
+            continue
+        parsed.append({"date": when, "description": row["description"], "debit": debit, "credit": credit,
+                       "amount": amount.quantize(Decimal("0.01"))})
+    return rows, parsed
+
+
+@web.route("/transactions/quick", methods=["GET", "POST"])
+@company_required
+def transactions_quick():
+    accounts = active_accounts()
+    if request.method == "GET":
+        return render_template("transactions/quick.html", accounts=accounts,
+                               rows=[blank_quick_row() for _ in range(QUICK_ROWS_DEFAULT)])
+    mode = "post" if "post" in request.form.getlist("mode") else "draft"
+    rows, parsed = parse_quick_rows(request.form, accounts)
+    if any(row["error"] for row in rows):
+        flash("Διορθώστε τις γραμμές με σφάλμα. Δεν αποθηκεύτηκε καμία εγγραφή.", "error")
+        return render_template("transactions/quick.html", accounts=accounts, rows=rows), 422
+    if not parsed:
+        flash("Δεν υπάρχουν συμπληρωμένες γραμμές.", "error")
+        return render_template("transactions/quick.html", accounts=accounts, rows=rows), 422
+    db = get_db()
+    for item in parsed:
+        transaction = TransactionModel(company_id=g.company.id, created_by_id=g.user.id,
+                                       transaction_date=item["date"], description=item["description"],
+                                       is_posted=mode == "post")
+        db.add(transaction)
+        db.flush()
+        db.add(TransactionLineModel(transaction_id=transaction.id, account_id=item["debit"],
+                                    amount=item["amount"], line_order=0))
+        db.add(TransactionLineModel(transaction_id=transaction.id, account_id=item["credit"],
+                                    amount=-item["amount"], line_order=1))
+    db.commit()
+    verb = "Οριστικοποιήθηκαν" if mode == "post" else "Αποθηκεύτηκαν"
+    flash(f"{verb} {len(parsed)} εγγραφές.", "success")
+    return finish("web.transactions_index")
+
+
 def save_transaction(transaction, accounts):
     db = get_db()
     account_ids = request.form.getlist("account_id")

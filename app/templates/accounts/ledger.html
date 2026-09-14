@@ -9,7 +9,7 @@
     <p>{{ account.description or 'Όλες οι οριστικοποιημένες κινήσεις, από τη νεότερη προς την παλαιότερη.' }}</p>
   </div>
   <div class="ledger-head-actions">
-    <div class="ledger-current"><span>Τρέχον υπόλοιπο</span><strong>{{ current_balance|money }}</strong></div>
+    <div class="ledger-current"><span>Τρέχον υπόλοιπο</span><strong data-countup>{{ current_balance|money }}</strong></div>
     <a class="icon-action icon-action-large" href="{{ url_for('web.accounts_index') }}" data-tooltip="Επιστροφή στους λογαριασμούς" aria-label="Επιστροφή στους λογαριασμούς">{{ icon('undo') }}</a>
   </div>
 </header>

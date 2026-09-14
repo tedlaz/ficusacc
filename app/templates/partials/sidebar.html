@@ -2,35 +2,42 @@
 <div class="drawer-scrim" data-drawer-close></div>
 <aside class="sidebar" data-drawer>
   <div class="brand-block">
-    <a href="{{ url_for('web.dashboard') }}" class="wordmark">Home<span>Accounting</span></a>
+    <a href="{{ url_for('web.dashboard') }}" data-nav="dashboard" class="wordmark"><span class="brand-mark">{{ icon('scale') }}</span>Home<span>Accounting</span></a>
     <p>Διπλογραφική λογιστική</p>
   </div>
   <form action="{{ url_for('web.switch_company') }}" method="post" class="company-switcher">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label for="company-select">Ενεργή εταιρεία</label>
-    <select id="company-select" name="company_id" onchange="this.form.requestSubmit()">
-      {% if not g.company %}<option value="">Δεν έχει επιλεγεί</option>{% endif %}
-      {% for company in companies %}
-        <option value="{{ company.id }}" {% if g.company and company.id == g.company.id %}selected{% endif %}>{{ company.name }}</option>
-      {% endfor %}
-    </select>
+    <div class="select-wrap select-dark">
+      {{ icon('building') }}
+      <select id="company-select" name="company_id" onchange="this.form.requestSubmit()">
+        {% if not g.company %}<option value="">Δεν έχει επιλεγεί</option>{% endif %}
+        {% for company in companies %}
+          <option value="{{ company.id }}" {% if g.company and company.id == g.company.id %}selected{% endif %}>{{ company.name }}</option>
+        {% endfor %}
+      </select>
+      {{ icon('chevron-down') }}
+    </div>
   </form>
   <nav class="main-nav" aria-label="Κύρια πλοήγηση">
-    <a href="{{ url_for('web.dashboard') }}" class="{{ 'active' if request.endpoint == 'web.dashboard' }}"><span>01</span> Επισκόπηση</a>
-    <a href="{{ url_for('web.accounts_index') }}" class="{{ 'active' if request.endpoint and 'account' in request.endpoint }}"><span>02</span> Λογαριασμοί</a>
-    <a href="{{ url_for('web.transactions_index') }}" class="{{ 'active' if request.endpoint and 'transaction' in request.endpoint }}"><span>03</span> Εγγραφές</a>
-    <a href="{{ url_for('web.reports_index') }}" class="{{ 'active' if request.endpoint and 'report' in request.endpoint }}"><span>04</span> Αναφορές</a>
-    <a href="{{ url_for('web.companies_index') }}" class="{{ 'active' if request.endpoint and 'compan' in request.endpoint }}"><span>05</span> Εταιρείες</a>
-    <a href="{{ url_for('web.users_index') }}" class="{{ 'active' if request.endpoint and 'user' in request.endpoint }}"><span>06</span> Χρήστες</a>
-    <a href="{{ url_for('web.backup_index') }}" class="{{ 'active' if request.endpoint and 'backup' in request.endpoint }}"><span>07</span> Αντίγραφα</a>
+    <a href="{{ url_for('web.dashboard') }}" data-nav="dashboard" class="{{ 'active' if request.endpoint == 'web.dashboard' }}">{{ icon('dashboard') }}<span>Επισκόπηση</span></a>
+    <a href="{{ url_for('web.accounts_index') }}" data-nav="accounts" class="{{ 'active' if request.endpoint and 'account' in request.endpoint }}">{{ icon('book') }}<span>Λογαριασμοί</span></a>
+    <a href="{{ url_for('web.transactions_index') }}" data-nav="transactions" class="{{ 'active' if request.endpoint and 'transaction' in request.endpoint }}">{{ icon('receipt') }}<span>Εγγραφές</span></a>
+    <a href="{{ url_for('web.reports_index') }}" data-nav="reports" class="{{ 'active' if request.endpoint and 'report' in request.endpoint }}">{{ icon('chart') }}<span>Αναφορές</span></a>
+    <a href="{{ url_for('web.companies_index') }}" data-nav="companies" class="{{ 'active' if request.endpoint and 'compan' in request.endpoint }}">{{ icon('building') }}<span>Εταιρείες</span></a>
+    <a href="{{ url_for('web.users_index') }}" data-nav="users" class="{{ 'active' if request.endpoint and 'user' in request.endpoint }}">{{ icon('users') }}<span>Χρήστες</span></a>
+    <a href="{{ url_for('web.backup_index') }}" data-nav="backup" class="{{ 'active' if request.endpoint and 'backup' in request.endpoint }}">{{ icon('database') }}<span>Αντίγραφα</span></a>
   </nav>
   <div class="sidebar-footer">
-    <div><strong>{{ g.user.full_name }}</strong><small>{{ g.user.email }}</small></div>
+    <div class="user-chip">
+      <span class="avatar" aria-hidden="true">{{ g.user.full_name[:1]|upper }}</span>
+      <div><strong>{{ g.user.full_name }}</strong><small>{{ g.user.email }}</small></div>
+    </div>
     <div class="footer-actions">
-      <a href="{{ url_for('web.change_password') }}">Κωδικός</a>
+      <a href="{{ url_for('web.change_password') }}" class="icon-action sidebar-icon" data-tooltip="Αλλαγή κωδικού" aria-label="Αλλαγή κωδικού">{{ icon('lock') }}</a>
       <form action="{{ url_for('web.logout') }}" method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="icon-action sidebar-icon" data-tooltip="Έξοδος" aria-label="Έξοδος">{{ icon('login') }}</button>
+        <button type="submit" class="icon-action sidebar-icon" data-tooltip="Έξοδος" aria-label="Έξοδος">{{ icon('logout') }}</button>
       </form>
     </div>
   </div>

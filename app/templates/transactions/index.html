@@ -6,6 +6,7 @@
   <div><p class="eyebrow">Ημερολόγιο · {{ pagination.total }} εγγραφές</p><h1>Λογιστικές εγγραφές</h1><p>Χρεώσεις και πιστώσεις με πλήρες ιστορικό.</p></div>
   <div class="head-actions">
     <button class="icon-action icon-action-large" type="button" data-open="journal-export-dialog" data-tooltip="Εξαγωγή σε αρχείο journal" aria-label="Εξαγωγή σε αρχείο journal">{{ icon('download') }}</button>
+    <a class="icon-action icon-action-large" href="{{ url_for('web.transactions_quick') }}" data-tooltip="Γρήγορη καταχώριση" aria-label="Γρήγορη καταχώριση">{{ icon('zap') }}</a>
     <a class="icon-action icon-action-primary icon-action-large" href="{{ url_for('web.transaction_new') }}" data-modal-url="{{ url_for('web.transaction_new') }}" data-tooltip="Νέα εγγραφή" aria-label="Νέα εγγραφή">{{ icon('plus') }}</a>
   </div>
 </header>
