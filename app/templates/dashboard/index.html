@@ -13,51 +13,124 @@
 {% if not g.company %}
 <section class="empty-state"><span>{{ icon('building') }}</span><h2>Ξεκινήστε με μία εταιρεία</h2><p>Δημιουργήστε ή επιλέξτε εταιρεία για να εμφανιστούν τα οικονομικά δεδομένα.</p><a class="icon-action icon-action-primary icon-action-large" href="{{ url_for('web.company_new') }}" data-modal-url="{{ url_for('web.company_new') }}" data-tooltip="Νέα εταιρεία" aria-label="Νέα εταιρεία">{{ icon('plus') }}</a></section>
 {% else %}
-<section class="panel cash-chart-panel" data-cash-chart>
+{% set fc = flow_chart %}
+{% set net_change = fc.change %}
+<section class="panel flow-chart-panel" data-flow-chart data-currency="{{ g.company.currency }}">
   <header>
-    <div><p class="eyebrow">Τελευταίοι 12 μήνες</p><h2>Πορεία ταμιακών διαθεσίμων</h2></div>
-    <div class="cash-chart-summary">
-      <span>Τρέχον υπόλοιπο</span>
-      <strong data-countup>{{ cash_total|money }}</strong>
-      <small class="trend {{ 'positive' if cash_chart.change > 0 else 'negative' if cash_chart.change < 0 else '' }}">
-        {% if cash_chart.change > 0 %}{{ icon('trend-up') }}{% elif cash_chart.change < 0 %}{{ icon('trend-down') }}{% endif %}{{ '+' if cash_chart.change > 0 else '' }}{{ cash_chart.change|money }} από τον προηγούμενο μήνα
-      </small>
+    <div><p class="eyebrow">Τελευταίοι 12 μήνες</p><h2>Ροή χρημάτων</h2></div>
+    <div class="flow-kpis">
+      <div class="flow-kpi flow-kpi-revenue"><span>Έσοδα 12μ</span><strong data-countup>{{ fc.totals.revenue|money }}</strong></div>
+      <div class="flow-kpi flow-kpi-expenses"><span>Έξοδα 12μ</span><strong data-countup>{{ fc.totals.expenses|money }}</strong></div>
+      <div class="flow-kpi flow-kpi-net {{ 'is-positive' if fc.totals.net > 0 else 'is-negative' if fc.totals.net < 0 else '' }}">
+        <span>Αποτέλεσμα 12μ</span>
+        <strong>{% if fc.totals.net > 0 %}<span class="flow-kpi-sign">+</span>{% endif %}<span data-countup>{{ fc.totals.net|money }}</span></strong>
+        <small class="trend {{ 'is-positive' if net_change > 0 else 'is-negative' if net_change < 0 else '' }}">{% if net_change > 0 %}{{ icon('trend-up') }}{% elif net_change < 0 %}{{ icon('trend-down') }}{% endif %}{{ '+' if net_change > 0 else '' }}{{ net_change|money }} από τον προηγούμενο μήνα</small>
+      </div>
+      <div class="flow-kpi flow-kpi-cash"><span>Ταμείο τώρα</span><strong data-countup>{{ cash_total|money }}</strong></div>
     </div>
   </header>
-  <div class="cash-chart-wrap">
-    <svg class="cash-chart" viewBox="0 0 {{ cash_chart.width }} 270" role="img" aria-labelledby="cash-chart-title cash-chart-description">
-      <title id="cash-chart-title">Ταμιακά διαθέσιμα ανά μήνα</title>
-      <desc id="cash-chart-description">Γραμμικό διάγραμμα του συνολικού υπολοίπου των λογαριασμών 38 για τους τελευταίους 12 μήνες.</desc>
+  <div class="flow-legend" role="group" aria-label="Σειρές διαγράμματος">
+    <button type="button" class="flow-legend-item" data-flow-toggle="revenue" aria-pressed="true"><i class="flow-legend-dot flow-legend-revenue"></i>Έσοδα</button>
+    <button type="button" class="flow-legend-item" data-flow-toggle="cash-in" aria-pressed="true"><i class="flow-legend-dot flow-legend-cash-in"></i>Ταμειακές εισροές</button>
+    <button type="button" class="flow-legend-item" data-flow-toggle="expenses" aria-pressed="true"><i class="flow-legend-dot flow-legend-expenses"></i>Έξοδα</button>
+    <button type="button" class="flow-legend-item" data-flow-toggle="cash-out" aria-pressed="true"><i class="flow-legend-dot flow-legend-cash-out"></i>Ταμειακές εκροές</button>
+    <span class="flow-legend-item flow-legend-static"><i class="flow-legend-dot flow-legend-net"></i>Καθαρό αποτέλεσμα</span>
+  </div>
+  <div class="flow-chart-wrap">
+    <svg class="flow-chart" viewBox="0 0 {{ fc.width }} 270" role="img" aria-labelledby="flow-chart-title flow-chart-description">
+      <title id="flow-chart-title">Ροή χρημάτων ανά μήνα</title>
+      <desc id="flow-chart-description">Ράβδοι εσόδων και ταμειακών εισροών πάνω από τον άξονα, εξόδων και εκροών κάτω, με γραμμή καθαρού αποτελέσματος για τους τελευταίους 12 μήνες.</desc>
       <defs>
-        <linearGradient id="cash-chart-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#19b3a0" stop-opacity=".28"/>
-          <stop offset="100%" stop-color="#8b5cf6" stop-opacity=".02"/>
-        </linearGradient>
-        <linearGradient id="cash-chart-stroke" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stop-color="#f59e0b"/>
-          <stop offset="55%" stop-color="#19b3a0"/>
-          <stop offset="100%" stop-color="#6d3fc4"/>
-        </linearGradient>
-        <filter id="cash-chart-glow" x="-100%" y="-100%" width="300%" height="300%">
-          <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#17211d" flood-opacity=".16"/>
-        </filter>
+        <linearGradient id="flow-fill-revenue" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#19b3a0"/><stop offset="100%" stop-color="#19b3a0" stop-opacity=".5"/></linearGradient>
+        <linearGradient id="flow-fill-cash-in" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#3b82f6" stop-opacity=".5"/></linearGradient>
+        <linearGradient id="flow-fill-expenses" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#f59e0b"/><stop offset="100%" stop-color="#f59e0b" stop-opacity=".5"/></linearGradient>
+        <linearGradient id="flow-fill-cash-out" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#f0705f"/><stop offset="100%" stop-color="#f0705f" stop-opacity=".5"/></linearGradient>
+        <filter id="flow-glow" x="-100%" y="-100%" width="300%" height="300%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#6d3fc4" flood-opacity=".28"/></filter>
       </defs>
-      {% for tick in cash_chart.ticks %}
-      <line class="chart-grid-line" x1="76" x2="938" y1="{{ tick.y }}" y2="{{ tick.y }}"/>
-      <text class="chart-y-label" x="64" y="{{ tick.y + 4 }}">{{ tick.value|money }}</text>
+      {% for tick in fc.ticks %}
+      <line class="chart-grid-line" x1="{{ fc.left }}" x2="{{ fc.right }}" y1="{{ tick.y }}" y2="{{ tick.y }}"/>
+      <text class="chart-y-label" x="{{ fc.left - 12 }}" y="{{ tick.y + 4 }}">{{ tick.value|money }}</text>
       {% endfor %}
-      <line class="chart-zero-line" x1="76" x2="938" y1="{{ cash_chart.zero_y }}" y2="{{ cash_chart.zero_y }}"/>
-      <path class="chart-area" d="{{ cash_chart.area_path }}"/>
-      <path class="chart-line" pathLength="1" d="{{ cash_chart.line_path }}"/>
-      {% for point in cash_chart.points %}
-      <g class="chart-point" data-month="{{ point.item.month.strftime('%Y-%m') }}" data-balance="{{ '%.2f'|format(point.item.balance) }}" tabindex="0" role="img" aria-label="{{ point.label }} {{ point.item.month.year }}: {{ point.item.balance|money }}">
-        <circle class="chart-point-halo" cx="{{ point.x }}" cy="{{ point.y }}" r="10"/>
-        <circle class="chart-point-dot" cx="{{ point.x }}" cy="{{ point.y }}" r="4"/>
-        <title>{{ point.label }} {{ point.item.month.year }} · {{ point.item.balance|money }}</title>
+      <line class="chart-zero-line" x1="{{ fc.left }}" x2="{{ fc.right }}" y1="{{ fc.zero_y }}" y2="{{ fc.zero_y }}"/>
+      <g class="flow-months">
+        {% for m in fc.months %}
+        <g class="flow-month" data-month="{{ m.item.month.strftime('%Y-%m') }}" data-label="{{ m.label }} {{ m.item.month.year }}" data-revenue="{{ '%.2f'|format(m.item.revenue) }}" data-expenses="{{ '%.2f'|format(m.item.expenses) }}" data-net="{{ '%.2f'|format(m.item.net) }}" data-cash-in="{{ '%.2f'|format(m.item.cash_in) }}" data-cash-out="{{ '%.2f'|format(m.item.cash_out) }}" tabindex="0" role="img" aria-label="{{ m.label }} {{ m.item.month.year }}: έσοδα {{ m.item.revenue|money }}, έξοδα {{ m.item.expenses|money }}, αποτέλεσμα {{ m.item.net|money }}, εισροές {{ m.item.cash_in|money }}, εκροές {{ m.item.cash_out|money }}">
+          <rect class="flow-hit" x="{{ m.hit_x }}" y="{{ fc.top }}" width="{{ m.hit_width }}" height="{{ fc.bottom - fc.top }}" rx="8"/>
+          <rect class="flow-bar flow-bar-up flow-revenue" x="{{ m.x_pl }}" y="{{ m.revenue_y }}" width="{{ fc.bar_width }}" height="{{ m.revenue_h }}" rx="3"/>
+          <rect class="flow-bar flow-bar-up flow-cash-in" x="{{ m.x_cash }}" y="{{ m.cash_in_y }}" width="{{ fc.bar_width }}" height="{{ m.cash_in_h }}" rx="3"/>
+          <rect class="flow-bar flow-bar-down flow-expenses" x="{{ m.x_pl }}" y="{{ fc.zero_y }}" width="{{ fc.bar_width }}" height="{{ m.expenses_h }}" rx="3"/>
+          <rect class="flow-bar flow-bar-down flow-cash-out" x="{{ m.x_cash }}" y="{{ fc.zero_y }}" width="{{ fc.bar_width }}" height="{{ m.cash_out_h }}" rx="3"/>
+        </g>
+        {% endfor %}
       </g>
-      <text class="chart-x-label {{ 'chart-x-label-alternate' if loop.index is even else '' }}" x="{{ point.x }}" y="254">{{ point.label }}</text>
+      <path class="flow-line" pathLength="1" d="{{ fc.line_path }}"/>
+      <g class="flow-points">
+        {% for m in fc.months %}
+        <g class="flow-point"><circle class="flow-point-halo" cx="{{ m.x_center }}" cy="{{ m.net_y }}" r="8"/><circle class="flow-point-dot" cx="{{ m.x_center }}" cy="{{ m.net_y }}" r="3.5"/></g>
+        {% endfor %}
+      </g>
+      {% for m in fc.months %}
+      <text class="chart-x-label" x="{{ m.x_center }}" y="254">{{ m.label }}</text>
       {% endfor %}
     </svg>
+    {% if fc.is_empty %}<p class="flow-empty">Δεν υπάρχουν οριστικές εγγραφές τους τελευταίους 12 μήνες.</p>{% endif %}
+  </div>
+</section>
+{% set sc = stream_chart %}
+{% set balance = sc.total_revenue - sc.total_expenses %}
+<section class="panel stream-chart-panel" data-stream-chart data-currency="{{ g.company.currency }}">
+  <header>
+    <div><p class="eyebrow">Τελευταίοι 12 μήνες</p><h2>Πού πάνε τα χρήματα</h2></div>
+    <div class="flow-kpis stream-kpis">
+      <div class="flow-kpi flow-kpi-revenue"><span>Έσοδα</span><strong data-countup>{{ sc.total_revenue|money }}</strong></div>
+      <div class="flow-kpi flow-kpi-expenses"><span>Έξοδα</span><strong data-countup>{{ sc.total_expenses|money }}</strong></div>
+      <div class="flow-kpi {{ 'stream-kpi-surplus' if balance >= 0 else 'stream-kpi-deficit' }}"><span>{{ 'Πλεόνασμα' if balance >= 0 else 'Έλλειμμα' }}</span><strong data-countup>{{ balance|abs|money }}</strong></div>
+    </div>
+  </header>
+  <div class="stream-chart-wrap">
+    <svg class="stream-chart" viewBox="0 0 {{ sc.width }} {{ sc.height }}" role="img" aria-labelledby="stream-chart-title stream-chart-description">
+      <title id="stream-chart-title">Πού πάνε τα χρήματα</title>
+      <desc id="stream-chart-description">Διάγραμμα ροής: κάθε λογαριασμός εσόδων ρέει σε μία κεντρική ζώνη εσόδων, η οποία διαμοιράζεται στους λογαριασμούς εξόδων και στο πλεόνασμα.</desc>
+      <defs>
+        {% for link in sc.links %}
+        <linearGradient id="stream-grad-{{ link.id }}" gradientUnits="userSpaceOnUse" x1="{{ link.x1 }}" y1="0" x2="{{ link.x2 }}" y2="0">
+          <stop offset="0%" stop-color="{{ link.color if link.side == 'left' else sc.band_color }}" stop-opacity="{{ '1' if link.side == 'left' else '.55' }}"/>
+          <stop offset="100%" stop-color="{{ sc.band_color if link.side == 'left' else link.color }}" stop-opacity="{{ '.55' if link.side == 'left' else '1' }}"/>
+        </linearGradient>
+        {% endfor %}
+        <linearGradient id="stream-shimmer" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="{{ sc.width }}" y2="0">
+          <stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".08" stop-color="#fff" stop-opacity=".55"/><stop offset=".16" stop-color="#fff" stop-opacity="0"/>
+          <animateTransform attributeName="gradientTransform" type="translate" from="-{{ sc.width }} 0" to="{{ sc.width }} 0" dur="3.4s" repeatCount="indefinite"/>
+        </linearGradient>
+      </defs>
+      <g class="stream-links">
+        {% for link in sc.links %}
+        <g class="stream-link" data-key="{{ link.id }}" data-side="{{ link.side }}" data-label="{{ link.node.label }}" data-amount="{{ '%.2f'|format(link.node.amount) }}" data-share="{{ link.share }}" data-kind="{{ link.node.kind }}"{% if link.node.detail %} data-detail="{{ link.node.detail|join('|') }}"{% endif %} tabindex="0" role="img" aria-label="{{ link.node.label }}: {{ link.node.amount|money }} ({{ link.share }}%)">
+          <path class="stream-ribbon" d="{{ link.path }}" fill="url(#stream-grad-{{ link.id }})"/>
+          <path class="stream-shine" d="{{ link.path }}" fill="url(#stream-shimmer)"/>
+        </g>
+        {% endfor %}
+      </g>
+      <g class="stream-nodes">
+        {% for item in sc.sources %}
+        <g class="stream-node stream-node-source" data-key="{{ item.node.key }}">
+          <rect x="{{ item.x }}" y="{{ item.y }}" width="{{ sc.node_width }}" height="{{ item.h }}" rx="3" fill="{{ item.color }}"/>
+          <text class="stream-label" x="{{ item.x - 10 }}" y="{{ item.y + item.h / 2 }}" text-anchor="end"><tspan>{{ item.node.label }}</tspan><tspan class="stream-sub" x="{{ item.x - 10 }}" dy="14">{{ item.node.amount|money }} · {{ item.share }}%</tspan></text>
+        </g>
+        {% endfor %}
+        {% for item in sc.targets %}
+        <g class="stream-node stream-node-target" data-key="{{ item.node.key }}">
+          <rect x="{{ item.x }}" y="{{ item.y }}" width="{{ sc.node_width }}" height="{{ item.h }}" rx="3" fill="{{ item.color }}"/>
+          <text class="stream-label" x="{{ item.x + sc.node_width + 10 }}" y="{{ item.y + item.h / 2 }}"><tspan>{{ item.node.label }}</tspan><tspan class="stream-sub" x="{{ item.x + sc.node_width + 10 }}" dy="14">{{ item.node.amount|money }} · {{ item.share }}%</tspan></text>
+        </g>
+        {% endfor %}
+        <g class="stream-band">
+          <rect x="{{ sc.band.x }}" y="{{ sc.band.y }}" width="{{ sc.node_width }}" height="{{ sc.band.h }}" rx="4" fill="{{ sc.band_color }}"/>
+          <text class="stream-band-label" x="{{ sc.band.x + sc.node_width / 2 }}" y="{{ sc.band.y - 10 }}" text-anchor="middle">Έσοδα · {{ sc.total|money }}</text>
+        </g>
+      </g>
+    </svg>
+    {% if sc.is_empty %}<p class="flow-empty">Δεν υπάρχουν έσοδα ή έξοδα τους τελευταίους 12 μήνες.</p>{% endif %}
   </div>
 </section>
 <section class="split-grid">

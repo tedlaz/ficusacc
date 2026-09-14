@@ -10,9 +10,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,500..700;1,500..700&family=Manrope:wght@400..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css', v='20260914-quick-3') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css', v='20260914-stream-1') }}">
   <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
-  <script src="{{ url_for('static', filename='js/app.js', v='20260914-quick-3') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/app.js', v='20260914-stream-1') }}" defer></script>
 </head>
 {% set endpoint = request.endpoint or '' %}
 {% set section = 'dashboard' if endpoint == 'web.dashboard' else 'accounts' if 'account' in endpoint else 'transactions' if 'transaction' in endpoint else 'reports' if 'report' in endpoint else 'companies' if 'compan' in endpoint else 'users' if 'user' in endpoint else 'backup' if 'backup' in endpoint else 'profile' %}

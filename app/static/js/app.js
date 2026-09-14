@@ -412,6 +412,14 @@ function enhance(root) {
     countUp(element)
   })
   root.querySelectorAll?.('[data-quick-form]').forEach(updateQuickTotals)
+  root.querySelectorAll('[data-flow-chart]:not([data-enhanced])').forEach((panel) => {
+    panel.dataset.enhanced = 'true'
+    restoreFlowHidden(panel)
+  })
+  root.querySelectorAll('[data-stream-chart]:not([data-enhanced])').forEach((panel) => {
+    panel.dataset.enhanced = 'true'
+    if (reducedMotion()) panel.querySelector('svg')?.pauseAnimations?.()
+  })
   root.querySelectorAll('[data-flash]:not([data-enhanced])').forEach((flash) => {
     flash.dataset.enhanced = 'true'
     scheduleFlashDismiss(flash)
@@ -619,6 +627,211 @@ function hideTransactionPreview() {
 
 window.addEventListener('scroll', hideTransactionPreview, true)
 window.addEventListener('resize', hideTransactionPreview)
+
+/* ---------- money-flow chart: tooltip + legend toggles ---------- */
+const FLOW_HIDDEN_KEY = 'ficus.flow-hidden'
+const FLOW_ROWS = [
+  ['revenue', 'Έσοδα', 'flow-legend-revenue'],
+  ['expenses', 'Έξοδα', 'flow-legend-expenses'],
+  ['net', 'Αποτέλεσμα', 'flow-legend-net'],
+  ['cashIn', 'Ταμειακές εισροές', 'flow-legend-cash-in'],
+  ['cashOut', 'Ταμειακές εκροές', 'flow-legend-cash-out'],
+]
+let flowTooltipElement
+
+document.addEventListener('mouseover', (event) => {
+  const month = event.target.closest?.('.flow-month')
+  if (!month || month.contains(event.relatedTarget)) return
+  showFlowTooltip(month)
+})
+document.addEventListener('mouseout', (event) => {
+  const month = event.target.closest?.('.flow-month')
+  if (!month || month.contains(event.relatedTarget)) return
+  hideFlowTooltip()
+})
+document.addEventListener('focusin', (event) => {
+  const month = event.target.closest?.('.flow-month')
+  if (month) showFlowTooltip(month)
+})
+document.addEventListener('focusout', (event) => {
+  if (event.target.closest?.('.flow-month')) hideFlowTooltip()
+})
+window.addEventListener('scroll', hideFlowTooltip, true)
+window.addEventListener('resize', hideFlowTooltip)
+
+document.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-flow-toggle]')
+  if (!button) return
+  const panel = button.closest('[data-flow-chart]')
+  const key = button.dataset.flowToggle
+  const hidden = new Set((panel.dataset.flowHidden || '').split(' ').filter(Boolean))
+  if (hidden.has(key)) hidden.delete(key)
+  else hidden.add(key)
+  applyFlowHidden(panel, hidden)
+  try { localStorage.setItem(FLOW_HIDDEN_KEY, [...hidden].join(' ')) } catch (_error) { /* storage unavailable */ }
+})
+
+function applyFlowHidden(panel, hidden) {
+  panel.dataset.flowHidden = [...hidden].join(' ')
+  panel.querySelectorAll('[data-flow-toggle]').forEach((button) => {
+    button.setAttribute('aria-pressed', String(!hidden.has(button.dataset.flowToggle)))
+  })
+}
+
+function restoreFlowHidden(panel) {
+  let stored = ''
+  try { stored = localStorage.getItem(FLOW_HIDDEN_KEY) || '' } catch (_error) { /* storage unavailable */ }
+  applyFlowHidden(panel, new Set(stored.split(' ').filter(Boolean)))
+}
+
+function formatMoney(value, currency) {
+  const amount = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value) || 0)
+  return `${amount} ${(currency || 'EUR').toUpperCase() === 'EUR' ? '€' : currency}`
+}
+
+function showFlowTooltip(month) {
+  hideFlowTooltip()
+  const currency = month.closest('[data-flow-chart]')?.dataset.currency
+  const tooltip = document.createElement('div')
+  tooltip.className = 'flow-tooltip'
+  tooltip.setAttribute('role', 'tooltip')
+  const title = document.createElement('strong')
+  title.textContent = month.dataset.label
+  const list = document.createElement('dl')
+  FLOW_ROWS.forEach(([key, label, dotClass]) => {
+    const term = document.createElement('dt')
+    const dot = document.createElement('i')
+    dot.className = `flow-legend-dot ${dotClass}`
+    term.append(dot, label)
+    const value = document.createElement('dd')
+    value.textContent = formatMoney(month.dataset[key], currency)
+    if (key === 'net') {
+      term.classList.add('is-net')
+      value.classList.add('is-net')
+      if (Number(month.dataset.net) < 0) value.classList.add('negative')
+    }
+    list.append(term, value)
+  })
+  tooltip.append(title, list)
+  document.body.append(tooltip)
+  flowTooltipElement = tooltip
+  const box = (month.querySelector('.flow-hit') || month).getBoundingClientRect()
+  const margin = 12
+  const { width, height } = tooltip.getBoundingClientRect()
+  let left = box.left + box.width / 2 - width / 2
+  left = Math.max(margin, Math.min(left, window.innerWidth - width - margin))
+  let top = box.top - height - 10
+  if (top < margin) top = Math.min(box.bottom + 10, window.innerHeight - height - margin)
+  tooltip.style.left = `${left}px`
+  tooltip.style.top = `${top}px`
+}
+
+function hideFlowTooltip() {
+  flowTooltipElement?.remove()
+  flowTooltipElement = undefined
+}
+
+/* ---------- money-stream chart (where the money goes) ---------- */
+let streamTooltipElement
+
+function streamTarget(event) {
+  return event.target.closest?.('.stream-link, .stream-node')
+}
+
+function streamKey(element) {
+  return element.dataset.key
+}
+
+document.addEventListener('mouseover', (event) => {
+  const element = streamTarget(event)
+  if (!element || element.contains(event.relatedTarget)) return
+  activateStream(element, { x: event.clientX, y: event.clientY })
+})
+document.addEventListener('mousemove', (event) => {
+  if (!streamTooltipElement || !streamTarget(event)) return
+  positionStreamTooltip(streamTooltipElement, { x: event.clientX, y: event.clientY })
+})
+document.addEventListener('mouseout', (event) => {
+  const element = streamTarget(event)
+  if (!element || element.contains(event.relatedTarget)) return
+  deactivateStream(element)
+})
+document.addEventListener('focusin', (event) => {
+  const element = streamTarget(event)
+  if (!element) return
+  const box = element.getBoundingClientRect()
+  activateStream(element, { x: box.left + box.width / 2, y: box.top + box.height / 2 })
+})
+document.addEventListener('focusout', (event) => {
+  const element = streamTarget(event)
+  if (element) deactivateStream(element)
+})
+window.addEventListener('scroll', hideStreamTooltip, true)
+window.addEventListener('resize', hideStreamTooltip)
+
+function activateStream(element, point) {
+  const panel = element.closest('[data-stream-chart]')
+  const key = streamKey(element)
+  panel.classList.add('is-hovering')
+  panel.querySelectorAll('.stream-link, .stream-node').forEach((node) => {
+    node.classList.toggle('is-active', streamKey(node) === key)
+  })
+  const link = panel.querySelector(`.stream-link[data-key="${CSS.escape(key)}"]`)
+  if (link) showStreamTooltip(link, point)
+}
+
+function deactivateStream(element) {
+  const panel = element.closest('[data-stream-chart]')
+  panel?.classList.remove('is-hovering')
+  panel?.querySelectorAll('.is-active').forEach((node) => node.classList.remove('is-active'))
+  hideStreamTooltip()
+}
+
+function showStreamTooltip(link, point) {
+  hideStreamTooltip()
+  const currency = link.closest('[data-stream-chart]')?.dataset.currency
+  const tooltip = document.createElement('div')
+  tooltip.className = 'flow-tooltip'
+  tooltip.setAttribute('role', 'tooltip')
+  const title = document.createElement('strong')
+  title.textContent = link.dataset.label
+  const list = document.createElement('dl')
+  const rows = [['Ποσό', formatMoney(link.dataset.amount, currency)], ['Μερίδιο', `${link.dataset.share.replace('.', ',')}%`]]
+  rows.forEach(([label, value]) => {
+    const term = document.createElement('dt')
+    term.textContent = label
+    const definition = document.createElement('dd')
+    definition.textContent = value
+    list.append(term, definition)
+  })
+  tooltip.append(title, list)
+  if (link.dataset.detail) {
+    const detail = document.createElement('p')
+    detail.className = 'stream-detail'
+    detail.textContent = `Περιλαμβάνει: ${link.dataset.detail.split('|').join(', ')}`
+    tooltip.append(detail)
+  }
+  document.body.append(tooltip)
+  streamTooltipElement = tooltip
+  positionStreamTooltip(tooltip, point)
+}
+
+function positionStreamTooltip(tooltip, point) {
+  const margin = 12
+  const { width, height } = tooltip.getBoundingClientRect()
+  let left = point.x + 16
+  if (left + width > window.innerWidth - margin) left = point.x - width - 16
+  left = Math.max(margin, left)
+  let top = point.y - height / 2
+  top = Math.max(margin, Math.min(top, window.innerHeight - height - margin))
+  tooltip.style.left = `${left}px`
+  tooltip.style.top = `${top}px`
+}
+
+function hideStreamTooltip() {
+  streamTooltipElement?.remove()
+  streamTooltipElement = undefined
+}
 
 /* ---------- greek dates ---------- */
 function formatGreekDateInput(value) {

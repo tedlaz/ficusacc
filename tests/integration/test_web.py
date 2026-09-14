@@ -80,15 +80,18 @@ def test_dashboard_uses_company_history_cash_balances_and_database_order(
     assert "Βασικοί λογαριασμοί" not in dashboard.text
     assert "Σύνολο ενεργητικού" not in dashboard.text
     assert "Υποχρεώσεις" not in dashboard.text
-    assert "Έσοδα" not in dashboard.text
-    assert "Έξοδα" not in dashboard.text
     assert "38.00.01" in dashboard.text
     assert "Κεντρικό Ταμείο" in dashboard.text
     assert "12,00 €" in dashboard.text
     assert "cash-total-row" in dashboard.text
-    assert "data-cash-chart" in dashboard.text
-    assert "Πορεία ταμιακών διαθεσίμων" in dashboard.text
-    assert 'data-month="2026-01" data-balance="12.00"' in dashboard.text
+    assert "data-flow-chart" in dashboard.text
+    assert "data-cash-chart" not in dashboard.text
+    assert "Ροή χρημάτων" in dashboard.text
+    assert "Ταμείο τώρα" in dashboard.text
+    assert (
+        'data-month="2026-01" data-label="Ιαν 2026" data-revenue="0.00" data-expenses="0.00" '
+        'data-net="0.00" data-cash-in="12.00" data-cash-out="0.00"'
+    ) in dashboard.text
     assert dashboard.text.count("data-dashboard-transaction") == 10
     assert dashboard.text.index("Overview entry 11") < dashboard.text.index("Overview entry 10")
     assert "<strong>Overview entry 00</strong>" not in dashboard.text
@@ -851,3 +854,86 @@ def test_quick_entry_rejects_empty_and_inactive(client, csrf, logged_in, app):
     assert inactive.status_code == 422
     assert "δεν είναι ενεργός" in inactive.text
     assert _transactions(app) == []
+
+
+def test_dashboard_flow_chart_splits_pl_and_nets_transfers(client, logged_in, app):
+    user_id, company_id = logged_in
+    month = date.today().replace(day=1)
+    day = month + timedelta(days=4)
+    with Session(app.extensions["sqlmodel_engine"]) as db:
+        cash = AccountModel(company_id=company_id, code="38.00.01", name="Ταμείο", account_type="asset")
+        bank = AccountModel(company_id=company_id, code="38.03.01", name="Τράπεζα", account_type="asset")
+        revenue = AccountModel(company_id=company_id, code="70.00.01", name="Πωλήσεις", account_type="revenue")
+        expense = AccountModel(company_id=company_id, code="60.00.01", name="Αμοιβές", account_type="expense")
+        db.add_all([cash, bank, revenue, expense])
+        db.flush()
+        entries = [
+            ("Πώληση", cash, revenue, 100, True),
+            ("Αμοιβή", expense, cash, 40, True),
+            ("Μεταφορά", bank, cash, 30, True),
+            ("Πρόχειρη πώληση", cash, revenue, 999, False),
+        ]
+        for description, debit, credit, amount, posted in entries:
+            transaction = TransactionModel(company_id=company_id, created_by_id=user_id, transaction_date=day,
+                                           description=description, is_posted=posted)
+            db.add(transaction)
+            db.flush()
+            db.add(TransactionLineModel(transaction_id=transaction.id, account_id=debit.id, amount=amount, line_order=0))
+            db.add(TransactionLineModel(transaction_id=transaction.id, account_id=credit.id, amount=-amount, line_order=1))
+        db.commit()
+
+    from app.web.routes import GREEK_MONTHS_SHORT
+
+    dashboard = client.get("/")
+    assert dashboard.status_code == 200
+    assert (
+        f'data-month="{month:%Y-%m}" data-label="{GREEK_MONTHS_SHORT[month.month - 1]} {month.year}" '
+        'data-revenue="100.00" data-expenses="40.00" data-net="60.00" data-cash-in="100.00" data-cash-out="40.00"'
+    ) in dashboard.text
+    assert dashboard.text.count('class="flow-month"') == 12
+    assert "100,00 €" in dashboard.text
+    assert "40,00 €" in dashboard.text
+    assert '<span class="flow-kpi-sign">+</span><span data-countup>60,00 €</span>' in dashboard.text
+    assert "flow-kpi-net is-positive" in dashboard.text
+    assert "flow-empty" not in dashboard.text
+
+
+def test_dashboard_stream_chart_shows_sources_targets_and_surplus(client, logged_in, app):
+    user_id, company_id = logged_in
+    day = date.today().replace(day=1) + timedelta(days=3)
+    with Session(app.extensions["sqlmodel_engine"]) as db:
+        cash = AccountModel(company_id=company_id, code="38.00", name="Ταμείο", account_type="asset")
+        sales = AccountModel(company_id=company_id, code="70.00", name="Πωλήσεις", account_type="revenue")
+        services = AccountModel(company_id=company_id, code="73.00", name="Υπηρεσίες", account_type="revenue")
+        wages = AccountModel(company_id=company_id, code="60.00", name="Μισθοί", account_type="expense")
+        rent = AccountModel(company_id=company_id, code="62.00", name="Ενοίκια", account_type="expense")
+        misc = AccountModel(company_id=company_id, code="64.00", name="Διάφορα", account_type="expense")
+        db.add_all([cash, sales, services, wages, rent, misc])
+        db.flush()
+        entries = [
+            (cash, sales, 300, True), (cash, services, 100, True),
+            (wages, cash, 150, True), (rent, cash, 90, True), (misc, cash, 10, True),
+            (misc, cash, 500, False),
+        ]
+        for debit, credit, amount, posted in entries:
+            transaction = TransactionModel(company_id=company_id, created_by_id=user_id, transaction_date=day,
+                                           description="s", is_posted=posted)
+            db.add(transaction)
+            db.flush()
+            db.add(TransactionLineModel(transaction_id=transaction.id, account_id=debit.id, amount=amount, line_order=0))
+            db.add(TransactionLineModel(transaction_id=transaction.id, account_id=credit.id, amount=-amount, line_order=1))
+        db.commit()
+        wages_id, sales_id = wages.id, sales.id
+
+    dashboard = client.get("/")
+    assert dashboard.status_code == 200
+    assert "data-stream-chart" in dashboard.text
+    assert "Πού πάνε τα χρήματα" in dashboard.text
+    assert (f'data-key="expense-{wages_id}" data-side="right" data-label="Μισθοί" data-amount="150.00" '
+            'data-share="37.5"') in dashboard.text
+    assert (f'data-key="revenue-{sales_id}" data-side="left" data-label="Πωλήσεις" data-amount="300.00" '
+            'data-share="75.0"') in dashboard.text
+    assert 'data-key="surplus" data-side="right" data-label="Πλεόνασμα" data-amount="150.00" data-share="37.5"' in dashboard.text
+    assert dashboard.text.count('class="stream-link"') == 6
+    assert "Έσοδα · 400,00 €" in dashboard.text
+    assert "flow-empty" not in dashboard.text

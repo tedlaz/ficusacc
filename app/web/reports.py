@@ -1,8 +1,9 @@
 """Synchronous report calculations preserving the original accounting semantics."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, func, select
@@ -32,9 +33,18 @@ class SummaryAccount:
 
 
 @dataclass(frozen=True)
-class MonthlyCashBalance:
+class MonthlyFlow:
+    """Money movement within one calendar month (accrual and cash views side by side)."""
+
     month: date
-    balance: Decimal
+    revenue: Decimal = Decimal("0")
+    expenses: Decimal = Decimal("0")
+    cash_in: Decimal = Decimal("0")
+    cash_out: Decimal = Decimal("0")
+
+    @property
+    def net(self) -> Decimal:
+        return self.revenue - self.expenses
 
 
 def transactions_between(db: Session, company_id: int, start: date, end: date):
@@ -78,48 +88,48 @@ def account_balances(db: Session, company_id: int, as_of: date, types=None):
     return balances
 
 
-def monthly_cash_balances(
-    db: Session, company_id: int, as_of: date, months: int = 12
-) -> list[MonthlyCashBalance]:
-    """Return cumulative 38* account balances for a rolling monthly window."""
+def month_start(value: date, offset: int = 0) -> date:
+    index = value.year * 12 + value.month - 1 + offset
+    return date(index // 12, index % 12 + 1, 1)
+
+
+def monthly_flows(db: Session, company_id: int, as_of: date, months: int = 12) -> list[MonthlyFlow]:
+    """Per-month revenue/expenses (accrual) and cash in/out (38* accounts) for a rolling window.
+
+    Only posted transactions count. Cash movement is netted per transaction, so a transfer
+    between two 38* accounts is neither an inflow nor an outflow.
+    """
     if months < 1:
         return []
 
-    cash_account_ids = set(
-        db.exec(
-            select(AccountModel.id).where(
-                AccountModel.company_id == company_id,
-                AccountModel.code.startswith("38"),
-            )
-        ).all()
-    )
-    current_month = as_of.replace(day=1)
-    month_index = current_month.year * 12 + current_month.month - 1 - (months - 1)
-    first_month = date(month_index // 12, month_index % 12 + 1, 1)
-    changes: dict[date, Decimal] = {}
-    opening_balance = Decimal("0")
+    accounts = db.exec(select(AccountModel).where(AccountModel.company_id == company_id)).all()
+    account_types = {account.id: account.account_type for account in accounts}
+    cash_ids = {account.id for account in accounts if account.code.startswith("38")}
+    first_month = month_start(as_of, -(months - 1))
+    totals: dict[date, dict[str, Decimal]] = {}
 
-    for transaction in transactions_between(db, company_id, date(1900, 1, 1), as_of):
+    for transaction in transactions_between(db, company_id, first_month, as_of):
         if not transaction.is_posted:
             continue
-        change = sum(
-            (line.amount for line in transaction.lines if line.account_id in cash_account_ids),
-            Decimal("0"),
-        )
-        if transaction.transaction_date < first_month:
-            opening_balance += change
-            continue
-        month = transaction.transaction_date.replace(day=1)
-        changes[month] = changes.get(month, Decimal("0")) + change
+        bucket = totals.setdefault(transaction.transaction_date.replace(day=1), {})
+        cash_delta = Decimal("0")
+        for line in transaction.lines:
+            account_type = account_types.get(line.account_id)
+            if account_type == AccountType.REVENUE:
+                bucket["revenue"] = bucket.get("revenue", Decimal("0")) - line.amount
+            elif account_type == AccountType.EXPENSE:
+                bucket["expenses"] = bucket.get("expenses", Decimal("0")) + line.amount
+            if line.account_id in cash_ids:
+                cash_delta += line.amount
+        if cash_delta > 0:
+            bucket["cash_in"] = bucket.get("cash_in", Decimal("0")) + cash_delta
+        elif cash_delta < 0:
+            bucket["cash_out"] = bucket.get("cash_out", Decimal("0")) - cash_delta
 
-    result = []
-    balance = opening_balance
-    for offset in range(months):
-        index = first_month.year * 12 + first_month.month - 1 + offset
-        month = date(index // 12, index % 12 + 1, 1)
-        balance += changes.get(month, Decimal("0"))
-        result.append(MonthlyCashBalance(month=month, balance=balance))
-    return result
+    return [
+        MonthlyFlow(month=month, **totals.get(month, {}))
+        for month in (month_start(first_month, offset) for offset in range(months))
+    ]
 
 
 def trial_balance(db: Session, company_id: int, as_of: date, include_summaries: bool = False):
@@ -228,6 +238,61 @@ def income_statement(db: Session, company_id: int, start: date, end: date):
     expense = sum((x.balance for x in expenses), Decimal("0"))
     return {"start_date": start, "end_date": end, "revenues": revenues, "expenses": expenses,
             "total_revenue": revenue, "total_expenses": expense, "net_income": revenue - expense}
+
+
+@dataclass
+class StreamNode:
+    """One end of a money stream: a revenue source, an expense target, or a balancing node."""
+
+    key: str
+    label: str
+    amount: Decimal
+    kind: str  # revenue | expense | other | surplus | deficit
+    detail: list[str] = field(default_factory=list)
+
+
+def _stream_nodes(items: list[AccountBalance], sign: int, kind: str, limit: int,
+                  other_key: str, other_label: str) -> list[StreamNode]:
+    amounts = sorted(
+        ((item.account, item.balance * sign) for item in items if item.balance * sign > 0),
+        key=lambda pair: pair[1], reverse=True,
+    )
+    nodes = [StreamNode(key=f"{kind}-{account.id}", label=account.name, amount=amount, kind=kind)
+             for account, amount in amounts[:limit]]
+    rest = amounts[limit:]
+    if rest:
+        nodes.append(StreamNode(key=other_key, label=other_label,
+                                amount=sum((amount for _, amount in rest), Decimal("0")), kind="other",
+                                detail=[f"{account.code} · {account.name}" for account, _ in rest]))
+    return nodes
+
+
+def money_streams(db: Session, company_id: int, as_of: date, months: int = 12,
+                  max_sources: int = 6, max_targets: int = 8) -> dict[str, Any]:
+    """Where the money goes: revenue accounts on the left, expense accounts on the right.
+
+    Both columns are balanced with a surplus target or a deficit source so they sum to the
+    same total. Only posted transactions in the rolling window count.
+    """
+    start = month_start(as_of, -(months - 1))
+    statement = income_statement(db, company_id, start, as_of)
+    sources = _stream_nodes(statement["revenues"], -1, "revenue", max_sources, "other-revenue", "Λοιπά έσοδα")
+    targets = _stream_nodes(statement["expenses"], 1, "expense", max_targets, "other-expense", "Λοιπά έξοδα")
+    total_revenue = sum((node.amount for node in sources), Decimal("0"))
+    total_expenses = sum((node.amount for node in targets), Decimal("0"))
+    if total_revenue > total_expenses:
+        targets.append(StreamNode("surplus", "Πλεόνασμα", total_revenue - total_expenses, "surplus"))
+    elif total_expenses > total_revenue:
+        sources.append(StreamNode("deficit", "Έλλειμμα", total_expenses - total_revenue, "deficit"))
+    return {
+        "sources": sources,
+        "targets": targets,
+        "total": max(total_revenue, total_expenses),
+        "total_revenue": total_revenue,
+        "total_expenses": total_expenses,
+        "start": start,
+        "end": as_of,
+    }
 
 
 def journal(

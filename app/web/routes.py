@@ -60,50 +60,87 @@ def finish(endpoint: str, **values):
     return redirect(target)
 
 
-def cash_chart_data(series: list[reports.MonthlyCashBalance]) -> dict[str, Any]:
-    width, top, bottom, left, right = 960, 24, 218, 76, 938
-    values = [item.balance for item in series]
-    low = min(values + [Decimal("0")])
-    high = max(values + [Decimal("0")])
-    span = high - low
-    is_flat = span == 0
-    padding = span * Decimal("0.1") if span else Decimal("1")
-    low -= padding
-    high += padding
-    span = high - low
+FLOW_WIDTH, FLOW_TOP, FLOW_BOTTOM, FLOW_LEFT, FLOW_RIGHT = 960, 24, 218, 76, 938
+FLOW_BAR_WIDTH, FLOW_BAR_GAP = 14, 6
 
-    def y_position(value: Decimal) -> float:
-        return round(top + float((high - value) / span) * (bottom - top), 2)
 
-    step = (right - left) / max(len(series) - 1, 1)
-    points = [
-        {
+NICE_STEPS = (Decimal("1"), Decimal("1.5"), Decimal("2"), Decimal("2.5"), Decimal("3"), Decimal("4"),
+              Decimal("5"), Decimal("7.5"), Decimal("10"))
+
+
+def nice_ceiling(value: Decimal) -> Decimal:
+    """Round up to a tidy axis limit (1234 -> 1500, 7 -> 7.5, 840.5 -> 1000, 0 -> 1)."""
+    if value <= 0:
+        return Decimal("1")
+    magnitude = Decimal(10) ** value.adjusted()
+    mantissa = value / magnitude
+    return next(step for step in NICE_STEPS if step >= mantissa) * magnitude
+
+
+def flow_chart_data(series: list[reports.MonthlyFlow]) -> dict[str, Any]:
+    """Geometry for the mirrored-bar money-flow chart: inflows above zero, outflows below."""
+    raw_limit = max(
+        [item.revenue for item in series] + [item.cash_in for item in series]
+        + [item.expenses for item in series] + [item.cash_out for item in series] + [Decimal("0")]
+    )
+    limit = nice_ceiling(raw_limit)
+    zero_y = (FLOW_TOP + FLOW_BOTTOM) / 2
+    half = (FLOW_BOTTOM - FLOW_TOP) / 2
+
+    def height(value: Decimal) -> float:
+        return round(float(value / limit) * half, 2)
+
+    def y_of(value: Decimal) -> float:
+        return round(zero_y - float(value / limit) * half, 2)
+
+    slot = (FLOW_RIGHT - FLOW_LEFT) / max(len(series), 1)
+    group_width = 2 * FLOW_BAR_WIDTH + FLOW_BAR_GAP
+    months = []
+    for index, item in enumerate(series):
+        slot_left = FLOW_LEFT + index * slot
+        x_pl = slot_left + (slot - group_width) / 2
+        months.append({
             "item": item,
             "label": GREEK_MONTHS_SHORT[item.month.month - 1],
-            "x": round(left + index * step, 2),
-            "y": y_position(item.balance),
-        }
-        for index, item in enumerate(series)
-    ]
+            "x_center": round(slot_left + slot / 2, 2),
+            "x_pl": round(x_pl, 2),
+            "x_cash": round(x_pl + FLOW_BAR_WIDTH + FLOW_BAR_GAP, 2),
+            "hit_x": round(slot_left + 2, 2),
+            "hit_width": round(slot - 4, 2),
+            "revenue_h": height(item.revenue),
+            "revenue_y": y_of(item.revenue),
+            "cash_in_h": height(item.cash_in),
+            "cash_in_y": y_of(item.cash_in),
+            "expenses_h": height(item.expenses),
+            "cash_out_h": height(item.cash_out),
+            "net_y": y_of(item.net),
+        })
     line_path = " ".join(
-        f"{'M' if index == 0 else 'L'} {point['x']} {point['y']}"
-        for index, point in enumerate(points)
+        f"{'M' if index == 0 else 'L'} {month['x_center']} {month['net_y']}"
+        for index, month in enumerate(months)
     )
-    zero_y = y_position(Decimal("0"))
-    area_path = f"{line_path} L {points[-1]['x']} {zero_y} L {points[0]['x']} {zero_y} Z" if points else ""
-    tick_values = (
-        (high, Decimal("0"), low)
-        if is_flat
-        else (high - padding, (high + low) / 2, low + padding)
-    )
+    tick_values = (limit, limit / 2, Decimal("0"), -limit / 2, -limit)
+    totals = {
+        "revenue": sum((item.revenue for item in series), Decimal("0")),
+        "expenses": sum((item.expenses for item in series), Decimal("0")),
+        "cash_in": sum((item.cash_in for item in series), Decimal("0")),
+        "cash_out": sum((item.cash_out for item in series), Decimal("0")),
+    }
+    totals["net"] = totals["revenue"] - totals["expenses"]
     return {
-        "width": width,
-        "points": points,
-        "line_path": line_path,
-        "area_path": area_path,
+        "width": FLOW_WIDTH,
+        "left": FLOW_LEFT,
+        "right": FLOW_RIGHT,
+        "top": FLOW_TOP,
+        "bottom": FLOW_BOTTOM,
         "zero_y": zero_y,
-        "ticks": [{"value": value, "y": y_position(value)} for value in tick_values],
-        "change": values[-1] - values[-2] if len(values) > 1 else Decimal("0"),
+        "bar_width": FLOW_BAR_WIDTH,
+        "months": months,
+        "line_path": line_path,
+        "ticks": [{"value": value, "y": y_of(value)} for value in tick_values],
+        "totals": totals,
+        "change": series[-1].net - series[-2].net if len(series) > 1 else Decimal("0"),
+        "is_empty": raw_limit == 0,
     }
 
 
@@ -268,6 +305,96 @@ def switch_company():
     return finish("web.dashboard")
 
 
+STREAM_WIDTH, STREAM_NODE_WIDTH, STREAM_GAP, STREAM_PAD, STREAM_MIN_PITCH = 960, 12, 12, 24, 26
+STREAM_SOURCE_X, STREAM_BAND_X, STREAM_TARGET_X = 200, 474, 748
+STREAM_SOURCE_COLORS = ("#19b3a0", "#0f8a7a", "#3b82f6", "#6273c7", "#2563b8", "#14a3c7")
+STREAM_TARGET_COLORS = ("#f59e0b", "#f0705f", "#8b5cf6", "#ec4899", "#a85c0e", "#c94b3b", "#6d3fc4", "#b3347a")
+STREAM_KIND_COLORS = {"other": "#9aa39c", "surplus": "#2a7a5f", "deficit": "#c94b3b"}
+STREAM_BAND_COLOR = "#17211d"
+
+
+def _ribbon(x1: float, y1a: float, y1b: float, x2: float, y2a: float, y2b: float) -> str:
+    mx = round((x1 + x2) / 2, 2)
+    return (f"M {x1} {y1a} C {mx} {y1a}, {mx} {y2a}, {x2} {y2a} L {x2} {y2b} "
+            f"C {mx} {y2b}, {mx} {y1b}, {x1} {y1b} Z")
+
+
+def stream_chart_data(streams: dict[str, Any]) -> dict[str, Any]:
+    """Sankey-style geometry: sources -> central income band -> targets."""
+    sources: list[reports.StreamNode] = streams["sources"]
+    targets: list[reports.StreamNode] = streams["targets"]
+    total: Decimal = streams["total"]
+    rows = max(len(sources), len(targets), 1)
+    height = max(300, STREAM_PAD * 2 + rows * 40)
+
+    def scale_for(nodes: list[reports.StreamNode]) -> float:
+        usable = height - STREAM_PAD * 2 - STREAM_GAP * max(len(nodes) - 1, 0)
+        return usable / float(total) if total else 0.0
+
+    scale = min(scale_for(sources), scale_for(targets)) if total else 0.0
+
+    def stack_height(nodes: list[reports.StreamNode]) -> float:
+        # Thin streams still need room for their two-line label, so each node occupies at least
+        # STREAM_MIN_PITCH vertically.
+        return (sum(max(float(node.amount) * scale, STREAM_MIN_PITCH) for node in nodes)
+                + STREAM_GAP * max(len(nodes) - 1, 0))
+
+    height = max(height, int(max(stack_height(sources), stack_height(targets)) + STREAM_PAD * 2) + 1)
+
+    def layout(nodes: list[reports.StreamNode], x: float, palette: tuple[str, ...]) -> list[dict[str, Any]]:
+        y = (height - stack_height(nodes)) / 2
+        placed = []
+        for index, node in enumerate(nodes):
+            h = max(2.0, float(node.amount) * scale)
+            pitch = max(h, STREAM_MIN_PITCH)
+            color = STREAM_KIND_COLORS.get(node.kind) or palette[index % len(palette)]
+            share = (node.amount / total * 100).quantize(Decimal("0.1")) if total else Decimal("0")
+            placed.append({"node": node, "x": x, "y": round(y + (pitch - h) / 2, 2), "h": round(h, 2),
+                           "color": color, "share": share})
+            y += pitch + STREAM_GAP
+        return placed
+
+    placed_sources = layout(sources, STREAM_SOURCE_X, STREAM_SOURCE_COLORS)
+    placed_targets = layout(targets, STREAM_TARGET_X, STREAM_TARGET_COLORS)
+    band_h = round(float(total) * scale, 2) if total else 0.0
+    band = {"x": STREAM_BAND_X, "y": round((height - band_h) / 2, 2), "h": band_h}
+
+    links = []
+    cursor = band["y"]
+    for item in placed_sources:
+        x1 = STREAM_SOURCE_X + STREAM_NODE_WIDTH
+        ribbon_h = float(item["node"].amount) * scale
+        links.append({"id": item["node"].key, "side": "left", "node": item["node"], "color": item["color"],
+                      "share": item["share"], "x1": x1, "x2": STREAM_BAND_X,
+                      "path": _ribbon(x1, item["y"], round(item["y"] + item["h"], 2), STREAM_BAND_X,
+                                      round(cursor, 2), round(cursor + ribbon_h, 2))})
+        cursor += ribbon_h
+    cursor = band["y"]
+    for item in placed_targets:
+        x1 = STREAM_BAND_X + STREAM_NODE_WIDTH
+        ribbon_h = float(item["node"].amount) * scale
+        links.append({"id": item["node"].key, "side": "right", "node": item["node"], "color": item["color"],
+                      "share": item["share"], "x1": x1, "x2": STREAM_TARGET_X,
+                      "path": _ribbon(x1, round(cursor, 2), round(cursor + ribbon_h, 2), STREAM_TARGET_X,
+                                      item["y"], round(item["y"] + item["h"], 2))})
+        cursor += ribbon_h
+
+    return {
+        "width": STREAM_WIDTH,
+        "height": height,
+        "node_width": STREAM_NODE_WIDTH,
+        "sources": placed_sources,
+        "targets": placed_targets,
+        "band": band,
+        "band_color": STREAM_BAND_COLOR,
+        "links": links,
+        "total": total,
+        "total_revenue": streams["total_revenue"],
+        "total_expenses": streams["total_expenses"],
+        "is_empty": total == 0,
+    }
+
+
 @web.get("/")
 @login_required
 def dashboard():
@@ -278,7 +405,8 @@ def dashboard():
             cash_total=Decimal("0"),
             transactions=[],
             first_transaction_date=None,
-            cash_chart=None,
+            flow_chart=None,
+            stream_chart=None,
         )
     db = get_db()
     first_transaction_date = db.exec(
@@ -300,14 +428,16 @@ def dashboard():
         key=lambda item: item.account.code,
     )
     cash_total = sum((item.balance for item in cash_accounts), Decimal("0"))
-    cash_chart = cash_chart_data(reports.monthly_cash_balances(db, g.company.id, date.today()))
+    flow_chart = flow_chart_data(reports.monthly_flows(db, g.company.id, date.today()))
+    stream_chart = stream_chart_data(reports.money_streams(db, g.company.id, date.today()))
     return render_template(
         "dashboard/index.html",
         cash_accounts=cash_accounts,
         cash_total=cash_total,
         transactions=transactions,
         first_transaction_date=first_transaction_date,
-        cash_chart=cash_chart,
+        flow_chart=flow_chart,
+        stream_chart=stream_chart,
     )
 
 
