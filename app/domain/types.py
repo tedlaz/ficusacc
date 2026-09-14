@@ -11,3 +11,17 @@ class AccountType(str, Enum):
     EQUITY = "equity"
     REVENUE = "revenue"
     EXPENSE = "expense"
+
+    @property
+    def label(self) -> str:
+        """Greek display name used throughout the UI and reports."""
+        return ACCOUNT_TYPE_LABELS[self.value]
+
+
+ACCOUNT_TYPE_LABELS = {
+    "asset": "Ενεργητικό",
+    "liability": "Υποχρεώσεις",
+    "equity": "Καθαρή θέση",
+    "revenue": "Έσοδα",
+    "expense": "Έξοδα",
+}

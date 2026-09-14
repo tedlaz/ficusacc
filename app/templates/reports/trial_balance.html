@@ -7,7 +7,7 @@
       <tr class="{{ 'trial-summary-row' if item.is_summary else 'trial-detail-row' }}" data-trial-code="{{ item.account.code }}">
         <td><span class="code">{{ item.account.code }}</span></td>
         <td><div class="trial-account-name {{ 'nested' if item.level }}" style="--account-level: {{ item.level }}">{% if item.account.id and not item.is_summary %}<a class="account-link" href="{{ url_for('web.account_ledger', account_id=item.account.id) }}">{{ item.account.name }}</a>{% else %}<span>{{ item.account.name }}</span>{% endif %}</div></td>
-        <td>{{ item.account.account_type.value }}</td>
+        <td><span class="type-pill type-{{ item.account.account_type.value }}">{{ item.account.account_type|account_type_label }}</span></td>
         <td class="amount">{{ item.debit_total|money }}</td>
         <td class="amount">{{ item.credit_total|money }}</td>
         <td class="amount">{{ item.balance|money }}</td>

@@ -6,14 +6,7 @@ from pathlib import Path
 
 from fpdf import FPDF
 
-
-ACCOUNT_TYPE_LABELS = {
-    "asset": "Ενεργητικό",
-    "liability": "Υποχρεώσεις",
-    "equity": "Καθαρή θέση",
-    "revenue": "Έσοδα",
-    "expense": "Έξοδα",
-}
+from app.domain.types import ACCOUNT_TYPE_LABELS
 
 
 def find_fonts() -> tuple[Path, Path]:

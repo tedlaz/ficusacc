@@ -190,6 +190,12 @@ def money(value, currency=None):
     return f"{formatted} {symbol}"
 
 
+@web.app_template_filter("account_type_label")
+def account_type_label(value):
+    kind = value if isinstance(value, AccountType) else AccountType(str(value))
+    return kind.label
+
+
 @web.app_template_filter("dategr")
 def dategr(value):
     return value.strftime("%d/%m/%Y") if value else "-"

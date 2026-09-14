@@ -937,3 +937,29 @@ def test_dashboard_stream_chart_shows_sources_targets_and_surplus(client, logged
     assert dashboard.text.count('class="stream-link"') == 6
     assert "Έσοδα · 400,00 €" in dashboard.text
     assert "flow-empty" not in dashboard.text
+
+
+def test_account_types_are_shown_in_greek(client, csrf, logged_in, app):
+    user_id, company_id = logged_in
+    with Session(app.extensions["sqlmodel_engine"]) as db:
+        supplier = AccountModel(company_id=company_id, code="50.00", name="Προμηθευτές", account_type="liability")
+        cash = AccountModel(company_id=company_id, code="38.00", name="Ταμείο", account_type="asset")
+        db.add_all([supplier, cash])
+        db.flush()
+        transaction = TransactionModel(company_id=company_id, created_by_id=user_id, transaction_date=date(2026, 3, 1),
+                                       description="Πληρωμή", is_posted=True)
+        db.add(transaction)
+        db.flush()
+        db.add(TransactionLineModel(transaction_id=transaction.id, account_id=supplier.id, amount=50, line_order=0))
+        db.add(TransactionLineModel(transaction_id=transaction.id, account_id=cash.id, amount=-50, line_order=1))
+        db.commit()
+    listing = client.get("/accounts")
+    assert 'class="type-pill type-liability">Υποχρεώσεις<' in listing.text
+    form = client.get("/accounts/new", headers={"HX-Request": "true"})
+    for english, greek in (("asset", "Ενεργητικό"), ("liability", "Υποχρεώσεις"), ("equity", "Καθαρή θέση"),
+                           ("revenue", "Έσοδα"), ("expense", "Έξοδα")):
+        assert f'<option value="{english}" >{greek}</option>' in form.text
+    assert ">Asset<" not in form.text
+    trial = client.get("/reports/result?report_type=trial_balance&as_of_date=31/12/2026", headers={"HX-Request": "true"})
+    assert "Υποχρεώσεις" in trial.text
+    assert ">liability<" not in trial.text
