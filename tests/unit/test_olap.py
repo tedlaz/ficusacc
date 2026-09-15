@@ -197,3 +197,23 @@ def test_cube_names_groups_from_header_accounts(app, seeded):
                              rows=("account_group", "account_subgroup"), account_types=("expense",))
         cube = olap.olap_cube(db, company_id, spec)
     assert [row.members[-1].label for row in cube.rows] == ["64 · Διάφορα έξοδα", "64.00 · Έξοδα μεταφορών"]
+
+
+def test_revenue_expense_and_result_measures():
+    facts = [
+        fact(date(2026, 1, 5), "-300", code="73.00", name="Υπηρεσίες", kind=AccountType.REVENUE, tx=1),
+        fact(date(2026, 1, 5), "300", code="38.00", name="Ταμείο", kind=AccountType.ASSET, tx=1),
+        fact(date(2026, 1, 9), "120", code="62.00", name="Ενοίκιο", kind=AccountType.EXPENSE, tx=2),
+        fact(date(2026, 1, 9), "-120", code="38.00", name="Ταμείο", kind=AccountType.ASSET, tx=2),
+        fact(date(2026, 2, 1), "50", code="62.00", name="Ενοίκιο", kind=AccountType.EXPENSE, tx=3),
+        fact(date(2026, 2, 1), "-50", code="38.00", name="Ταμείο", kind=AccountType.ASSET, tx=3),
+    ]
+    spec = olap.CubeSpec(**{**SPEC.__dict__, "rows": ("month",), "measures": ("revenue", "expense", "result"),
+                            "chart": "bar"})
+    cube = olap.build_cube(facts, spec)
+    values = [[str(cube.value(row.cells[""], measure)) for measure in cube.measures] for row in cube.rows]
+    assert values == [["300", "120", "180"], ["0", "50", "-50"]]
+    assert str(cube.value(cube.total, olap.MEASURES["result"])) == "130"
+    # Without a column dimension every money measure becomes a chart series: income vs expenses vs result.
+    assert [series["label"] for series in cube.chart["series"]] == ["Έσοδα", "Έξοδα", "Αποτέλεσμα (Έσοδα − Έξοδα)"]
+    assert cube.chart["series"][2]["values"] == ["180", "-50"]

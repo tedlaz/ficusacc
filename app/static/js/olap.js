@@ -496,7 +496,34 @@
     if (event.target.matches('[data-report-type]') || event.target.closest('[data-olap]')) syncBuilder(form)
   })
 
+  /* Presets fill the builder and run it; unspecified fields keep their current values. */
+  function applyPreset(form, preset) {
+    const rows = [...form.querySelectorAll('[data-olap-row]')]
+    if (preset.row_dim) rows.forEach((select, index) => { select.value = preset.row_dim[index] || '' })
+    if (preset.col_dim !== undefined) form.querySelector('[data-olap-col]').value = preset.col_dim
+    if (preset.measure) form.querySelectorAll('[name="measure"]').forEach((input) => {
+      input.disabled = false
+      input.checked = preset.measure.includes(input.value)
+    })
+    if (preset.account_type) form.querySelectorAll('[name="account_type"]').forEach((input) => {
+      input.checked = preset.account_type.includes(input.value)
+    })
+    if (preset.chart_type) {
+      const radio = form.querySelector(`[name="chart_type"][value="${preset.chart_type}"]`)
+      if (radio) radio.checked = true
+    }
+    if (preset.sort) form.querySelector('[name="sort"]').value = preset.sort
+    if (preset.limit !== undefined) form.querySelector('[name="limit"]').value = preset.limit
+    syncBuilder(form)
+    form.requestSubmit()
+  }
+
   document.addEventListener('click', (event) => {
+    const preset = event.target.closest('[data-olap-preset]')
+    if (preset) {
+      applyPreset(preset.closest('form'), JSON.parse(preset.dataset.olapPreset))
+      return
+    }
     const toggle = event.target.closest('[data-olap-toggle]')
     if (toggle) {
       const panel = toggle.closest('[data-olap-chart]')

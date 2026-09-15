@@ -342,7 +342,9 @@ def build_olap(cube, company):
         pdf.set_font("Report", "B", 8)
         pdf.set_text_color(23, 42, 49)
         caption = f"{chart['measure']['label']} ανά {chart['axis_label']}"
-        if chart["type"] == "heatmap":
+        if cube.column_dimension is None and len(chart["series"]) > 1:
+            caption = f"{' · '.join(series['label'] for series in chart['series'])} ανά {chart['axis_label']}"
+        elif chart["type"] == "heatmap":
             caption += f" · γραμμές: {chart['series_label']}"
         elif len(chart["series"]) > 1:
             caption += f" · χρώμα: {chart['series_label']}"

@@ -12,6 +12,13 @@
   <button class="icon-action icon-action-primary" data-tooltip="Δημιουργία αναφοράς" aria-label="Δημιουργία αναφοράς">{{ icon('check') }}</button><span id="report-loading" class="htmx-indicator loading-pill"><span class="spinner"></span>Υπολογισμός…</span>
   <fieldset class="olap-builder" data-olap hidden>
     <legend class="eyebrow">Σχεδιασμός κύβου</legend>
+    <div class="olap-presets" role="group" aria-label="Έτοιμες αναλύσεις">
+      <span class="olap-presets-label">Έτοιμες αναλύσεις</span>
+      <button type="button" class="olap-preset" data-olap-preset='{"row_dim": ["month"], "col_dim": "", "measure": ["revenue", "expense", "result"], "chart_type": "bar", "account_type": []}'>Έσοδα vs Έξοδα ανά μήνα</button>
+      <button type="button" class="olap-preset" data-olap-preset='{"row_dim": ["quarter"], "col_dim": "", "measure": ["revenue", "expense", "result"], "chart_type": "line", "account_type": []}'>Αποτέλεσμα ανά τρίμηνο</button>
+      <button type="button" class="olap-preset" data-olap-preset='{"row_dim": ["account_subgroup", "account"], "col_dim": "", "measure": ["expense"], "chart_type": "donut", "account_type": ["expense"], "sort": "value"}'>Πού πάνε τα έξοδα</button>
+      <button type="button" class="olap-preset" data-olap-preset='{"row_dim": ["account"], "col_dim": "month", "measure": ["revenue"], "chart_type": "heatmap", "account_type": ["revenue"], "sort": "value"}'>Έσοδα ανά πηγή και μήνα</button>
+    </div>
     <div class="olap-builder-grid">
       <div class="olap-block">
         <p class="olap-block-title">Γραμμές <small>έως {{ olap_max_rows }} επίπεδα</small></p>

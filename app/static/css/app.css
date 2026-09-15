@@ -665,6 +665,11 @@ input:user-invalid { border-color: var(--red); box-shadow: 0 0 0 4px #a6403622; 
 /* ---------- OLAP cube builder ---------- */
 .olap-builder { grid-column: 1 / -1; margin: 6px 0 0; border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px 18px; background: linear-gradient(145deg, #fffdf8, #fbf5ea); animation: rise .35s var(--ease-out) both; }
 .olap-builder legend { padding: 0 6px; }
+.olap-presets { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 2px 0 14px; }
+.olap-presets-label { margin-right: 4px; color: var(--muted); font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.olap-preset { border: 1px solid var(--line); border-radius: 99px; padding: 6px 12px; background: #fff; color: var(--ink); font: 700 .76rem var(--font-sans); cursor: pointer; transition: border-color .18s, background .18s, transform .18s var(--spring); }
+.olap-preset:hover { border-color: var(--accent); background: var(--accent-soft); transform: translateY(-1px); }
+.olap-preset:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .olap-builder-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
 .olap-block { display: grid; align-content: start; gap: 9px; }
 .olap-block-title { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 4px 0 0; color: var(--ink); font-size: .8rem; font-weight: 800; }

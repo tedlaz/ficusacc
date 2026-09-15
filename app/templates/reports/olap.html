@@ -20,7 +20,7 @@
   {% else %}
   <section class="olap-chart-panel" data-olap-chart data-currency="{{ g.company.currency }}">
     <div class="olap-chart-head">
-      <div><p class="eyebrow">{{ cube.chart.measure.label }} ανά {{ cube.chart.axis_label }}{% if cube.chart.type == 'heatmap' %} · γραμμές: {{ cube.chart.series_label }}{% elif cube.chart.series|length > 1 %} · χρώμα: {{ cube.chart.series_label }}{% endif %}</p></div>
+      <div><p class="eyebrow">{% if not cube.column_dimension and cube.chart.series|length > 1 %}{{ cube.chart.series|map(attribute='label')|join(' · ') }} ανά {{ cube.chart.axis_label }}{% else %}{{ cube.chart.measure.label }} ανά {{ cube.chart.axis_label }}{% if cube.chart.type == 'heatmap' %} · γραμμές: {{ cube.chart.series_label }}{% elif cube.chart.series|length > 1 %} · χρώμα: {{ cube.chart.series_label }}{% endif %}{% endif %}</p></div>
       <div class="olap-chart-legend" data-olap-legend role="group" aria-label="Σειρές γραφήματος"></div>
     </div>
     <div class="olap-chart-stage" data-olap-stage></div>

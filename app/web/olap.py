@@ -76,6 +76,8 @@ class Aggregate:
     debit: Decimal = ZERO
     credit: Decimal = ZERO
     natural: Decimal = ZERO
+    revenue: Decimal = ZERO  # revenue accounts only, credit-positive
+    expense: Decimal = ZERO  # expense accounts only, debit-positive
     lines: int = 0
     transaction_ids: set[int] = field(default_factory=set)
 
@@ -85,6 +87,10 @@ class Aggregate:
         else:
             self.credit -= fact.amount
         self.natural += fact.amount if fact.account_type in NATURAL_DEBIT_TYPES else -fact.amount
+        if fact.account_type == AccountType.REVENUE:
+            self.revenue -= fact.amount
+        elif fact.account_type == AccountType.EXPENSE:
+            self.expense += fact.amount
         self.lines += 1
         self.transaction_ids.add(fact.transaction_id)
 
@@ -190,6 +196,9 @@ MEASURES: dict[str, Measure] = {
     measure.key: measure
     for measure in (
         Measure("natural", "Καθαρή κίνηση", "money", lambda a: a.natural, signed=True),
+        Measure("revenue", "Έσοδα", "money", lambda a: a.revenue),
+        Measure("expense", "Έξοδα", "money", lambda a: a.expense),
+        Measure("result", "Αποτέλεσμα (Έσοδα − Έξοδα)", "money", lambda a: a.revenue - a.expense, signed=True),
         Measure("debit", "Χρεώσεις", "money", lambda a: a.debit),
         Measure("credit", "Πιστώσεις", "money", lambda a: a.credit),
         Measure("net", "Χρέωση − Πίστωση", "money", lambda a: a.debit - a.credit, signed=True),
