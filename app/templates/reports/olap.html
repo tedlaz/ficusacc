@@ -1,0 +1,82 @@
+{% from 'macros/icons.html' import icon %}
+{% set spec = cube.spec %}
+{% set columns = cube.columns if cube.column_dimension else [] %}
+{% set slices = cube.row_dimensions|map(attribute='label')|join(' × ') %}
+<article class="panel report-output olap-report" data-pdf-title="Κύβος OLAP {{ spec.start|dategr }} – {{ spec.end|dategr }}" data-pdf-file="olap-{{ spec.start }}-{{ spec.end }}.pdf">
+  <header class="olap-head">
+    <div>
+      <p class="eyebrow">{{ spec.start|dategr }} έως {{ spec.end|dategr }} · {{ cube.fact_count }} γραμμές{% if not spec.posted_only %} · με πρόχειρες{% endif %}</p>
+      <h2>{{ slices }}{% if cube.column_dimension %} <span class="olap-head-by">ανά {{ cube.column_dimension.label }}</span>{% endif %}</h2>
+    </div>
+    <div class="flow-kpis olap-kpis">
+      {% for measure in cube.measures %}
+      <div class="flow-kpi olap-kpi"><span>{{ measure.label }}</span><strong data-countup>{% if measure.kind == 'money' %}{{ cube.value(cube.total, measure)|money }}{% else %}{{ '%d'|format(cube.value(cube.total, measure)) }}{% endif %}</strong></div>
+      {% endfor %}
+    </div>
+  </header>
+
+  {% if cube.is_empty %}
+  <div class="empty-state olap-empty"><span>{{ icon('chart') }}</span><h2>Κενός κύβος</h2><p>Δεν υπάρχουν γραμμές εγγραφών για τα φίλτρα που επιλέξατε. Δοκιμάστε μεγαλύτερη περίοδο ή λιγότερα φίλτρα.</p></div>
+  {% else %}
+  <section class="olap-chart-panel" data-olap-chart data-currency="{{ g.company.currency }}">
+    <div class="olap-chart-head">
+      <div><p class="eyebrow">{{ cube.chart.measure.label }} ανά {{ cube.chart.axis_label }}{% if cube.chart.type == 'heatmap' %} · γραμμές: {{ cube.chart.series_label }}{% elif cube.chart.series|length > 1 %} · χρώμα: {{ cube.chart.series_label }}{% endif %}</p></div>
+      <div class="olap-chart-legend" data-olap-legend role="group" aria-label="Σειρές γραφήματος"></div>
+    </div>
+    <div class="olap-chart-stage" data-olap-stage></div>
+    <script type="application/json" data-olap-data>{{ chart_json|safe }}</script>
+  </section>
+
+  <div class="table-wrap olap-table-wrap"><table class="olap-table">
+    <thead>
+      {% if columns %}
+      <tr class="olap-col-groups">
+        {% for dimension in cube.row_dimensions %}<th rowspan="2" class="olap-th-dim">{{ dimension.label }}</th>{% endfor %}
+        {% for column in columns %}<th colspan="{{ cube.measures|length }}" class="olap-th-col">{{ column.label }}</th>{% endfor %}
+        <th colspan="{{ cube.measures|length }}" class="olap-th-col olap-th-total">Σύνολο</th>
+      </tr>
+      <tr>
+        {% for column in columns %}{% for measure in cube.measures %}<th class="numeric olap-th-measure">{{ measure.label }}</th>{% endfor %}{% endfor %}
+        {% for measure in cube.measures %}<th class="numeric olap-th-measure olap-th-total">{{ measure.label }}</th>{% endfor %}
+      </tr>
+      {% else %}
+      <tr>
+        {% for dimension in cube.row_dimensions %}<th class="olap-th-dim">{{ dimension.label }}</th>{% endfor %}
+        {% for measure in cube.measures %}<th class="numeric olap-th-measure">{{ measure.label }}</th>{% endfor %}
+      </tr>
+      {% endif %}
+    </thead>
+    <tbody>
+      {% for row in cube.rows %}
+      <tr class="{{ 'trial-detail-row' if row.is_leaf else 'trial-summary-row' }} olap-row-level-{{ row.level }}" data-olap-row="{{ row.members[0].key }}">
+        {% for dimension in cube.row_dimensions %}
+        {% set index = loop.index0 %}
+        <td class="olap-td-dim">{% if index == row.level %}{{ row.members[index].label }}{% endif %}</td>
+        {% endfor %}
+        {% for column in columns %}{% for measure in cube.measures %}
+        {% set value = cube.value(row.cells.get(column.key), measure) %}
+        <td class="amount olap-cell {{ 'is-zero' if not value }} {{ 'negative' if value < 0 }}">{% if measure.kind == 'money' %}{{ value|money }}{% else %}{{ '%d'|format(value) }}{% endif %}</td>
+        {% endfor %}{% endfor %}
+        {% for measure in cube.measures %}
+        {% set value = cube.value(row.cells.get(''), measure) %}
+        <td class="amount olap-cell olap-cell-total {{ 'negative' if value < 0 }}">{% if measure.kind == 'money' %}{{ value|money }}{% else %}{{ '%d'|format(value) }}{% endif %}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <th colspan="{{ cube.row_dimensions|length }}">Σύνολο</th>
+        {% for column in columns %}{% for measure in cube.measures %}
+        {% set value = cube.value(cube.column_totals.get(column.key), measure) %}
+        <th class="amount {{ 'negative' if value < 0 }}">{% if measure.kind == 'money' %}{{ value|money }}{% else %}{{ '%d'|format(value) }}{% endif %}</th>
+        {% endfor %}{% endfor %}
+        {% for measure in cube.measures %}
+        {% set value = cube.value(cube.total, measure) %}
+        <th class="amount olap-cell-total {{ 'negative' if value < 0 }}">{% if measure.kind == 'money' %}{{ value|money }}{% else %}{{ '%d'|format(value) }}{% endif %}</th>
+        {% endfor %}
+      </tr>
+    </tfoot>
+  </table></div>
+  {% endif %}
+</article>

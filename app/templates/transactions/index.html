@@ -2,16 +2,34 @@
 {% from 'macros/icons.html' import icon %}
 {% block title %}Εγγραφές | HomeAccounting{% endblock %}
 {% block content %}
+{% set here = request.full_path.rstrip('?') %}
 <header class="page-head">
-  <div><p class="eyebrow">Ημερολόγιο · {{ pagination.total }} εγγραφές</p><h1>Λογιστικές εγγραφές</h1><p>Χρεώσεις και πιστώσεις με πλήρες ιστορικό.</p></div>
+  <div><p class="eyebrow">Ημερολόγιο · {{ pagination.total }} εγγραφές{% if is_filtered %} (φιλτραρισμένες){% endif %}</p><h1>Λογιστικές εγγραφές</h1><p>Χρεώσεις και πιστώσεις με πλήρες ιστορικό.</p></div>
   <div class="head-actions">
     <button class="icon-action icon-action-large" type="button" data-open="journal-export-dialog" data-tooltip="Εξαγωγή σε αρχείο journal" aria-label="Εξαγωγή σε αρχείο journal">{{ icon('download') }}</button>
     <a class="icon-action icon-action-large" href="{{ url_for('web.transactions_quick') }}" data-tooltip="Γρήγορη καταχώριση" aria-label="Γρήγορη καταχώριση">{{ icon('zap') }}</a>
-    <a class="icon-action icon-action-primary icon-action-large" href="{{ url_for('web.transaction_new') }}" data-modal-url="{{ url_for('web.transaction_new') }}" data-tooltip="Νέα εγγραφή" aria-label="Νέα εγγραφή">{{ icon('plus') }}</a>
+    <a class="icon-action icon-action-primary icon-action-large" href="{{ url_for('web.transaction_new') }}" data-modal-url="{{ url_for('web.transaction_new', next=here) }}" data-tooltip="Νέα εγγραφή" aria-label="Νέα εγγραφή">{{ icon('plus') }}</a>
   </div>
 </header>
+<form class="panel filter-bar" method="get" action="{{ url_for('web.transactions_index') }}" data-auto-submit role="search" aria-label="Φίλτρα εγγραφών">
+  <div class="filter-row">
+    <label>Ημερομηνία<input type="search" name="date" value="{{ filters.date }}" placeholder="2026, 2026-01, 15/01/2026" autocomplete="off"></label>
+    <label>Ποσό από<input type="text" name="min" value="{{ filters.min }}" inputmode="decimal" placeholder="0,00" autocomplete="off"></label>
+    <label>Ποσό έως<input type="text" name="max" value="{{ filters.max }}" inputmode="decimal" placeholder="∞" autocomplete="off"></label>
+    <label>Κατάσταση<select name="status"><option value="">Όλες</option><option value="posted" {{ 'selected' if filters.status == 'posted' }}>Οριστικές</option><option value="draft" {{ 'selected' if filters.status == 'draft' }}>Πρόχειρες</option></select></label>
+  </div>
+  <div class="filter-row">
+    <label class="filter-grow">Περιγραφή<input type="search" name="q" value="{{ filters.q }}" placeholder="Αναζήτηση σε περιγραφή ή σχετικό" autocomplete="off"></label>
+    <label>Ταξινόμηση<select name="sort">{% for key, label in [('date', 'Ημερομηνία'), ('description', 'Περιγραφή'), ('amount', 'Ποσό'), ('status', 'Κατάσταση')] %}<option value="{{ key }}" {{ 'selected' if filters.sort == key }}>{{ label }}</option>{% endfor %}</select></label>
+    <label>Σειρά<select name="dir"><option value="desc" {{ 'selected' if filters.dir == 'desc' }}>Φθίνουσα</option><option value="asc" {{ 'selected' if filters.dir == 'asc' }}>Αύξουσα</option></select></label>
+    <div class="filter-actions">
+      <button class="icon-action icon-action-primary" data-tooltip="Εφαρμογή φίλτρων" aria-label="Εφαρμογή φίλτρων">{{ icon('search') }}</button>
+      {% if is_filtered %}<a class="icon-action" href="{{ url_for('web.transactions_index', sort=filters.sort if filters.sort != 'date' else none, dir=filters.dir if filters.sort != 'date' else none) }}" data-tooltip="Καθαρισμός φίλτρων" aria-label="Καθαρισμός φίλτρων">{{ icon('close') }}</a>{% endif %}
+    </div>
+  </div>
+</form>
 <section class="panel table-panel"><div class="table-wrap"><table>
-  <thead><tr><th>Ημερομηνία</th><th>Περιγραφή</th><th>Σχετικό</th><th>Ποσό</th><th>Κατάσταση</th><th></th></tr></thead>
+  <thead><tr><th>Ημερομηνία</th><th>Περιγραφή</th><th>Σχετικό</th><th class="numeric">Ποσό</th><th>Κατάσταση</th><th></th></tr></thead>
   <tbody>
   {% for item in transactions %}
     {% set debit = item.lines|selectattr('amount', 'gt', 0)|sum(attribute='amount') %}
@@ -24,26 +42,26 @@
       <td class="row-actions">
         <a class="icon-action" href="{{ url_for('web.transaction_view', transaction_id=item.id) }}" data-modal-url="{{ url_for('web.transaction_view', transaction_id=item.id) }}" data-transaction-preview-url="{{ url_for('web.transaction_preview', transaction_id=item.id) }}" data-tooltip="Προβολή" aria-label="Προβολή">{{ icon('eye') }}</a>
         {% if item.is_posted %}
-          <a class="icon-action" href="{{ url_for('web.transaction_copy', transaction_id=item.id) }}" data-modal-url="{{ url_for('web.transaction_copy', transaction_id=item.id) }}" data-tooltip="Αντιγραφή" aria-label="Αντιγραφή">{{ icon('copy') }}</a>
+          <a class="icon-action" href="{{ url_for('web.transaction_copy', transaction_id=item.id) }}" data-modal-url="{{ url_for('web.transaction_copy', transaction_id=item.id, next=here) }}" data-tooltip="Αντιγραφή" aria-label="Αντιγραφή">{{ icon('copy') }}</a>
           <form method="post" action="{{ url_for('web.transaction_unpost', transaction_id=item.id) }}" data-transaction-action data-confirm="Μετατροπή σε πρόχειρη εγγραφή;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path.rstrip('?') }}">
             <button class="icon-action" data-tooltip="Αναίρεση οριστικοποίησης" aria-label="Αναίρεση οριστικοποίησης">{{ icon('undo') }}</button>
           </form>
         {% else %}
-          <a class="icon-action" href="{{ url_for('web.transaction_edit', transaction_id=item.id) }}" data-modal-url="{{ url_for('web.transaction_edit', transaction_id=item.id) }}" data-tooltip="Επεξεργασία" aria-label="Επεξεργασία">{{ icon('edit') }}</a>
+          <a class="icon-action" href="{{ url_for('web.transaction_edit', transaction_id=item.id) }}" data-modal-url="{{ url_for('web.transaction_edit', transaction_id=item.id, next=here) }}" data-tooltip="Επεξεργασία" aria-label="Επεξεργασία">{{ icon('edit') }}</a>
           <form method="post" action="{{ url_for('web.transaction_post', transaction_id=item.id) }}" data-transaction-action data-confirm="Οριστικοποίηση εγγραφής;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path.rstrip('?') }}">
             <button class="icon-action" data-tooltip="Οριστικοποίηση" aria-label="Οριστικοποίηση">{{ icon('check') }}</button>
           </form>
           <form method="post" action="{{ url_for('web.transaction_delete', transaction_id=item.id) }}" data-transaction-action data-confirm="Οριστική διαγραφή εγγραφής;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path.rstrip('?') }}">
             <button class="icon-action icon-action-danger" data-tooltip="Διαγραφή" aria-label="Διαγραφή">{{ icon('trash') }}</button>
           </form>
         {% endif %}
       </td>
     </tr>
   {% else %}
-    <tr><td colspan="6" class="table-empty">Δεν υπάρχουν λογιστικές εγγραφές.</td></tr>
+    <tr><td colspan="6" class="table-empty">{% if is_filtered %}Καμία εγγραφή δεν ταιριάζει στα φίλτρα.{% else %}Δεν υπάρχουν λογιστικές εγγραφές.{% endif %}</td></tr>
   {% endfor %}
   </tbody>
 </table></div></section>

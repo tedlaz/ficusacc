@@ -1,8 +1,10 @@
 """End-to-end tests for server-rendered Flask workflows."""
 
 from datetime import date, timedelta
+from decimal import Decimal
 from pathlib import Path
 import re
+from urllib.parse import quote
 
 from sqlmodel import Session, select
 
@@ -963,3 +965,137 @@ def test_account_types_are_shown_in_greek(client, csrf, logged_in, app):
     trial = client.get("/reports/result?report_type=trial_balance&as_of_date=31/12/2026", headers={"HX-Request": "true"})
     assert "Υποχρεώσεις" in trial.text
     assert ">liability<" not in trial.text
+
+
+def test_olap_report_html_pdf_and_csv(client, logged_in, app):
+    user_id, company_id = logged_in
+    with Session(app.extensions["sqlmodel_engine"]) as db:
+        cash = AccountModel(company_id=company_id, code="38.00", name="Ταμείο", account_type="asset")
+        rent = AccountModel(company_id=company_id, code="62.00", name="Ενοίκιο", account_type="expense")
+        db.add_all([cash, rent])
+        db.flush()
+        transaction = TransactionModel(company_id=company_id, created_by_id=user_id, is_posted=True,
+                                       transaction_date=date(2026, 1, 15), description="Ενοίκιο Ιανουαρίου")
+        db.add(transaction)
+        db.flush()
+        db.add(TransactionLineModel(transaction_id=transaction.id, account_id=rent.id, amount=Decimal("500")))
+        db.add(TransactionLineModel(transaction_id=transaction.id, account_id=cash.id, amount=Decimal("-500")))
+        db.commit()
+
+    query = ("report_type=olap&start_date=01/01/2026&end_date=31/01/2026&row_dim=month&row_dim=account"
+             "&col_dim=account_type&measure=natural&measure=debit&chart_type=stacked")
+    page = client.get("/reports")
+    assert page.status_code == 200
+    assert 'value="olap"' in page.text
+    assert "Σχεδιασμός κύβου" in page.text
+
+    html = client.get(f"/reports/result?{query}")
+    assert html.status_code == 200
+    assert "data-olap-chart" in html.text
+    assert '"type": "stacked"' in html.text
+    assert "62.00 · Ενοίκιο" in html.text
+    assert "500,00 €" in html.text
+
+    pdf = client.get(f"/reports/pdf?{query}")
+    assert pdf.status_code == 200
+    assert pdf.data.startswith(b"%PDF")
+
+    csv_response = client.get(f"/reports/olap.csv?{query}")
+    assert csv_response.status_code == 200
+    assert csv_response.mimetype == "text/csv"
+    assert "Μήνας;Λογαριασμός;" in csv_response.text
+    assert "Σύνολο;;" in csv_response.text
+
+
+def test_transactions_list_filters_and_sorting(client, logged_in, app):
+    user_id, company_id = logged_in
+    with Session(app.extensions["sqlmodel_engine"]) as db:
+        cash = AccountModel(company_id=company_id, code="38.00", name="Ταμείο", account_type="asset")
+        rent = AccountModel(company_id=company_id, code="62.00", name="Ενοίκιο", account_type="expense")
+        db.add_all([cash, rent])
+        db.flush()
+        rows = (
+            (date(2026, 1, 15), "Ενοίκιο Ιανουαρίου", Decimal("500"), True, "ΤΠΥ-1"),
+            (date(2026, 2, 3), "Λογαριασμός ΔΕΗ", Decimal("120"), False, None),
+            (date(2025, 12, 30), "Αγορά αναλωσίμων", Decimal("45.50"), True, None),
+            (date(2025, 12, 29), "«ΆΛΦΑ» τιμολόγιο", Decimal("10"), True, None),
+        )
+        for when, description, amount, posted, reference in rows:
+            transaction = TransactionModel(company_id=company_id, created_by_id=user_id, is_posted=posted,
+                                           transaction_date=when, description=description, reference=reference)
+            db.add(transaction)
+            db.flush()
+            db.add(TransactionLineModel(transaction_id=transaction.id, account_id=rent.id, amount=amount))
+            db.add(TransactionLineModel(transaction_id=transaction.id, account_id=cash.id, amount=-amount))
+        db.commit()
+
+    def titles(url):
+        page = client.get(url)
+        assert page.status_code == 200
+        return re.findall(r"<td data-label=\"Περιγραφή\"><strong>(.*?)</strong>", page.text)
+
+    assert titles("/transactions") == ["Λογαριασμός ΔΕΗ", "Ενοίκιο Ιανουαρίου", "Αγορά αναλωσίμων", "«ΆΛΦΑ» τιμολόγιο"]
+    assert titles("/transactions?sort=date&dir=asc")[0] == "«ΆΛΦΑ» τιμολόγιο"
+    assert titles("/transactions?sort=amount&dir=desc")[:2] == ["Ενοίκιο Ιανουαρίου", "Λογαριασμός ΔΕΗ"]
+    # Greek collation: accents, case and punctuation are ignored, so «ΆΛΦΑ» sorts as "αλφα" (after "αγορα").
+    assert titles("/transactions?sort=description&dir=asc") == [
+        "Αγορά αναλωσίμων", "«ΆΛΦΑ» τιμολόγιο", "Ενοίκιο Ιανουαρίου", "Λογαριασμός ΔΕΗ"]
+    assert titles("/transactions?sort=status&dir=asc")[0] == "Λογαριασμός ΔΕΗ"  # drafts first
+
+    assert titles("/transactions?date=2026") == ["Λογαριασμός ΔΕΗ", "Ενοίκιο Ιανουαρίου"]
+    assert titles("/transactions?date=2026-01") == ["Ενοίκιο Ιανουαρίου"]
+    assert titles("/transactions?date=02/2026") == ["Λογαριασμός ΔΕΗ"]
+    assert titles("/transactions?date=30/12/2025") == ["Αγορά αναλωσίμων"]
+    assert titles("/transactions?q=αλφα") == ["«ΆΛΦΑ» τιμολόγιο"]      # accent- and case-insensitive
+    assert titles("/transactions?q=ενοικιο ιανουαριου") == ["Ενοίκιο Ιανουαρίου"]
+    assert titles("/transactions?q=δεη") == ["Λογαριασμός ΔΕΗ"]
+    assert titles("/transactions?q=ΤΠΥ") == ["Ενοίκιο Ιανουαρίου"]
+    assert titles("/transactions?min=100&max=200") == ["Λογαριασμός ΔΕΗ"]
+    assert titles("/transactions?min=45,50") == ["Λογαριασμός ΔΕΗ", "Ενοίκιο Ιανουαρίου", "Αγορά αναλωσίμων"]
+    assert titles("/transactions?max=45,5") == ["Αγορά αναλωσίμων", "«ΆΛΦΑ» τιμολόγιο"]
+    assert titles("/transactions?status=draft") == ["Λογαριασμός ΔΕΗ"]
+    assert titles("/transactions?status=posted&sort=amount&dir=asc") == ["«ΆΛΦΑ» τιμολόγιο", "Αγορά αναλωσίμων", "Ενοίκιο Ιανουαρίου"]
+    assert titles("/transactions?q=nothing-here") == []
+    assert "Καμία εγγραφή δεν ταιριάζει" in client.get("/transactions?q=nothing-here").text
+    page = client.get("/transactions?status=draft&sort=amount&dir=asc")
+    assert 'name="next" value="/transactions?status=draft&amp;sort=amount&amp;dir=asc"' in page.text
+
+
+def test_editing_a_transaction_returns_to_the_filtered_list(client, csrf, logged_in, app):
+    user_id, company_id = logged_in
+    with Session(app.extensions["sqlmodel_engine"]) as db:
+        cash = AccountModel(company_id=company_id, code="38.00", name="Ταμείο", account_type="asset")
+        rent = AccountModel(company_id=company_id, code="62.00", name="Ενοίκιο", account_type="expense")
+        db.add_all([cash, rent])
+        db.flush()
+        transaction = TransactionModel(company_id=company_id, created_by_id=user_id, is_posted=False,
+                                       transaction_date=date(2026, 1, 15), description="Πρόχειρη")
+        db.add(transaction)
+        db.flush()
+        db.add(TransactionLineModel(transaction_id=transaction.id, account_id=rent.id, amount=Decimal("50")))
+        db.add(TransactionLineModel(transaction_id=transaction.id, account_id=cash.id, amount=Decimal("-50")))
+        db.commit()
+        transaction_id, rent_id, cash_id = transaction.id, rent.id, cash.id
+
+    listing = "/transactions?status=draft&sort=amount&dir=asc"
+    page = client.get(listing)
+    assert (f'data-modal-url="/transactions/{transaction_id}/edit?next=/transactions?status%3Ddraft%26sort%3Damount%26dir%3Dasc"'
+            in page.text)
+
+    form = client.get(f"/transactions/{transaction_id}/edit?next={quote(listing, safe='')}")
+    assert f'name="next" value="{listing.replace("&", "&amp;")}"' in form.text
+
+    response = client.post(f"/transactions/{transaction_id}/edit", headers={"HX-Request": "true"}, data={
+        "csrf_token": csrf, "next": listing, "transaction_date": "15/01/2026", "description": "Αλλαγμένη",
+        "account_id": [str(rent_id), str(cash_id)], "amount": ["60", "-60"], "line_description": ["", ""],
+    })
+    assert response.status_code == 200, response.text[:300]
+    assert response.headers["HX-Redirect"] == listing
+
+    # An off-site "next" is ignored.
+    response = client.post(f"/transactions/{transaction_id}/edit", headers={"HX-Request": "true"}, data={
+        "csrf_token": csrf, "next": "https://evil.example/x", "transaction_date": "15/01/2026",
+        "description": "Αλλαγμένη", "account_id": [str(rent_id), str(cash_id)], "amount": ["60", "-60"],
+        "line_description": ["", ""],
+    })
+    assert response.headers["HX-Redirect"] == "/transactions"

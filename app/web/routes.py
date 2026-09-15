@@ -2,6 +2,8 @@
 
 import csv
 import io
+import json
+import re
 import shutil
 import sqlite3
 import uuid
@@ -9,6 +11,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 from flask import (
     Blueprint,
@@ -27,11 +30,12 @@ from flask import (
 )
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import selectinload
+from sqlalchemy import String, case, cast, or_
 from sqlmodel import col, func, select
 
 from app.core.security import hash_password, verify_password
 from app.domain.types import AccountType
-from app.extensions import get_db, reset_engine
+from app.extensions import fold_text, get_db, reset_engine
 from app.infrastructure.database.models import (
     AccountModel,
     CompanyModel,
@@ -40,7 +44,7 @@ from app.infrastructure.database.models import (
     UserCompanyAccessModel,
     UserModel,
 )
-from app.web import journal_export, reports
+from app.web import journal_export, olap, reports
 from app.web.auth import company_required, login_required, superuser_required
 from app.web.pdf_reports import build_report_pdf
 
@@ -49,6 +53,18 @@ ACCOUNT_TYPES = list(AccountType)
 ROLES = ["owner", "admin", "accountant", "viewer"]
 PAGE_SIZE = 25
 GREEK_MONTHS_SHORT = ("Ιαν", "Φεβ", "Μαρ", "Απρ", "Μαι", "Ιουν", "Ιουλ", "Αυγ", "Σεπ", "Οκτ", "Νοε", "Δεκ")
+
+
+def finish_list():
+    """Return to the transactions list, keeping the filters the row action came from."""
+    target = request.form.get("next") or ""
+    if target.startswith("/transactions") and not target.startswith("//"):
+        if request.headers.get("HX-Request"):
+            response = make_response("")
+            response.headers["HX-Redirect"] = target
+            return response
+        return redirect(target)
+    return finish("web.transactions_index")
 
 
 def finish(endpoint: str, **values):
@@ -168,6 +184,14 @@ def companies_for_user(user_id: int):
         .order_by(CompanyModel.name)
     )
     return list(db.exec(statement).all())
+
+
+@web.app_template_global("query_with")
+def query_with(**changes):
+    """Current query string with some keys replaced (empty values drop the key)."""
+    values = {key: value for key, value in request.args.to_dict().items() if key not in changes}
+    values.update({key: value for key, value in changes.items() if value not in (None, "")})
+    return urlencode(values)
 
 
 @web.app_context_processor
@@ -933,20 +957,138 @@ def transaction_query(transaction_id=None):
     return statement
 
 
+TRANSACTION_SORTS = {"date", "description", "amount", "status"}
+
+
+def text_fold(column):
+    """Accent/case/punctuation-insensitive text key: fold_text() on SQLite (see extensions), lower() elsewhere."""
+    if get_db().get_bind().dialect.name == "sqlite":
+        return func.fold_text(column)
+    return func.lower(column)
+
+
+def parse_date_filter(raw: str) -> tuple[date, date] | None:
+    """Turn a full or partial date ("2026", "2026-01", "01/2026", "15/01/2026") into an inclusive range."""
+    text = raw.strip()
+    patterns = (
+        (r"^(\d{4})$", lambda m: (int(m[1]), None, None)),
+        (r"^(\d{4})-(\d{1,2})$", lambda m: (int(m[1]), int(m[2]), None)),
+        (r"^(\d{4})-(\d{1,2})-(\d{1,2})$", lambda m: (int(m[1]), int(m[2]), int(m[3]))),
+        (r"^(\d{1,2})/(\d{4})$", lambda m: (int(m[2]), int(m[1]), None)),
+        (r"^(\d{1,2})/(\d{1,2})/(\d{4})$", lambda m: (int(m[3]), int(m[2]), int(m[1]))),
+    )
+    for pattern, extract in patterns:
+        match = re.match(pattern, text)
+        if not match:
+            continue
+        year, month, day = extract(match)
+        try:
+            if day is not None:
+                start = date(year, month, day)
+                return start, start
+            if month is not None:
+                start = date(year, month, 1)
+                return start, reports.month_start(start, 1) - timedelta(days=1)
+            return date(year, 1, 1), date(year, 12, 31)
+        except ValueError:
+            return None
+    return None
+
+
+def parse_amount(raw: str | None) -> Decimal | None:
+    text = (raw or "").strip().replace(" ", "")
+    if not text:
+        return None
+    if "," in text and "." in text:  # 1.234,56 (Greek) vs 1,234.56 (English): last separator is decimal
+        decimal_mark = "," if text.rfind(",") > text.rfind(".") else "."
+        text = text.replace("." if decimal_mark == "," else ",", "").replace(",", ".")
+    else:
+        text = text.replace(",", ".")
+    try:
+        return Decimal(text)
+    except InvalidOperation:
+        return None
+
+
+def transaction_filters():
+    """Read list filters/sort from the query string, normalised for both the query and the template."""
+    args = request.args
+    sort = args.get("sort") if args.get("sort") in TRANSACTION_SORTS else "date"
+    direction = "asc" if args.get("dir") == "asc" else "desc"
+    if args.get("sort") not in TRANSACTION_SORTS:
+        direction = "desc"
+    status = args.get("status") if args.get("status") in {"posted", "draft"} else ""
+    return {
+        "q": (args.get("q") or "").strip(),
+        "date": (args.get("date") or "").strip(),
+        "min": (args.get("min") or "").strip(),
+        "max": (args.get("max") or "").strip(),
+        "status": status,
+        "sort": sort,
+        "dir": direction,
+    }
+
+
 @web.get("/transactions")
 @company_required
 def transactions_index():
     db = get_db()
-    total = db.exec(
-        select(func.count()).select_from(TransactionModel).where(TransactionModel.company_id == g.company.id)
-    ).one()
+    filters = transaction_filters()
+
+    debit_total = (
+        select(
+            TransactionLineModel.transaction_id.label("transaction_id"),
+            func.coalesce(func.sum(case((TransactionLineModel.amount > 0, TransactionLineModel.amount), else_=0)), 0)
+            .label("total"),
+        )
+        .group_by(TransactionLineModel.transaction_id)
+        .subquery()
+    )
+    total_column = func.coalesce(debit_total.c.total, 0)
+    conditions = [TransactionModel.company_id == g.company.id]
+    if filters["q"]:
+        needle = f"%{fold_text(filters['q'])}%"
+        conditions.append(or_(text_fold(TransactionModel.description).like(needle),
+                              text_fold(TransactionModel.reference).like(needle)))
+    if filters["date"]:
+        span = parse_date_filter(filters["date"])
+        if span:
+            conditions += [TransactionModel.transaction_date >= span[0], TransactionModel.transaction_date <= span[1]]
+        else:  # free-text fallback on the ISO form, e.g. "-03-" for every March
+            conditions.append(cast(TransactionModel.transaction_date, String).like(f"%{filters['date']}%"))
+    minimum, maximum = parse_amount(filters["min"]), parse_amount(filters["max"])
+    if minimum is not None:
+        conditions.append(total_column >= minimum)
+    if maximum is not None:
+        conditions.append(total_column <= maximum)
+    if filters["status"]:
+        conditions.append(TransactionModel.is_posted == (filters["status"] == "posted"))
+
+    base = (
+        select(TransactionModel)
+        .outerjoin(debit_total, debit_total.c.transaction_id == TransactionModel.id)
+        .where(*conditions)
+    )
+    total = db.exec(select(func.count()).select_from(base.subquery())).one()
     page = max(request.args.get("page", 1, type=int) or 1, 1)
     pages = max((total + PAGE_SIZE - 1) // PAGE_SIZE, 1)
     page = min(page, pages)
+
+    sort_columns = {
+        "date": col(TransactionModel.transaction_date),
+        "description": text_fold(TransactionModel.description),
+        "amount": total_column,
+        "status": col(TransactionModel.is_posted),
+    }
+    primary = sort_columns[filters["sort"]]
+    ordering = [primary.asc() if filters["dir"] == "asc" else primary.desc()]
+    if filters["sort"] != "date":
+        ordering.append(col(TransactionModel.transaction_date).desc())
+    ordering.append(col(TransactionModel.id).desc())
     transactions = list(
         db.exec(
-            transaction_query()
-            .order_by(col(TransactionModel.transaction_date).desc(), col(TransactionModel.id).desc())
+            base.options(selectinload(TransactionModel.lines))
+            .order_by(*ordering)
             .offset((page - 1) * PAGE_SIZE)
             .limit(PAGE_SIZE)
         ).all()
@@ -954,7 +1096,8 @@ def transactions_index():
     accounts = list(db.exec(select(AccountModel).where(AccountModel.company_id == g.company.id)).all())
     pagination = {"page": page, "pages": pages, "total": total}
     export_end = date.today()
-    return render_template("transactions/index.html", transactions=transactions,
+    return render_template("transactions/index.html", transactions=transactions, filters=filters,
+                           is_filtered=any(filters[key] for key in ("q", "date", "min", "max", "status")),
                            account_map={a.id: a for a in accounts}, pagination=pagination,
                            export_start=export_end - timedelta(days=365), export_end=export_end)
 
@@ -1136,7 +1279,7 @@ def save_transaction(transaction, accounts):
                                     amount=amount, description=description, line_order=index))
     db.commit()
     flash("Η εγγραφή αποθηκεύτηκε.", "success")
-    return finish("web.transactions_index")
+    return finish_list()
 
 
 @web.get("/transactions/<int:transaction_id>")
@@ -1178,7 +1321,7 @@ def transaction_post(transaction_id):
     get_db().add(transaction)
     get_db().commit()
     flash("Η εγγραφή οριστικοποιήθηκε.", "success")
-    return finish("web.transactions_index")
+    return finish_list()
 
 
 @web.post("/transactions/<int:transaction_id>/unpost")
@@ -1191,7 +1334,7 @@ def transaction_unpost(transaction_id):
     get_db().add(transaction)
     get_db().commit()
     flash("Η εγγραφή έγινε πρόχειρη.", "success")
-    return finish("web.transactions_index")
+    return finish_list()
 
 
 @web.post("/transactions/<int:transaction_id>/delete")
@@ -1205,7 +1348,7 @@ def transaction_delete(transaction_id):
     get_db().delete(transaction)
     get_db().commit()
     flash("Η εγγραφή διαγράφηκε.", "success")
-    return finish("web.transactions_index")
+    return finish_list()
 
 
 @web.post("/transactions/export/journal")
@@ -1251,7 +1394,16 @@ def transactions_export_journal():
 def reports_index():
     end = date.today()
     return render_template("reports/index.html", start_date=end - timedelta(days=30), end_date=end,
-                           accounts=active_accounts())
+                           accounts=active_accounts(), olap_dimensions=olap.DIMENSIONS.values(),
+                           olap_groups=olap.DIMENSION_GROUPS, olap_measures=olap.MEASURES.values(),
+                           olap_charts=olap.CHART_TYPES, olap_max_rows=olap.MAX_ROW_DIMENSIONS)
+
+
+def olap_cube_from_request():
+    end = parse_date(request.args.get("end_date"), date.today())
+    start = parse_date(request.args.get("start_date"), end - timedelta(days=30))
+    spec = olap.CubeSpec.from_args(request.args, start, end)
+    return olap.olap_cube(get_db(), g.company.id, spec)
 
 
 @web.get("/reports/result")
@@ -1264,6 +1416,10 @@ def report_result():
         if not data:
             return '<div class="empty-state">Επιλέξτε λογαριασμό.</div>'
         return render_template("reports/general_ledger.html", **data, report_type=kind)
+    if kind == "olap":
+        cube = olap_cube_from_request()
+        return render_template("reports/olap.html", cube=cube, chart_json=json.dumps(cube.chart),
+                               report_type=kind)
 
     if kind in {"trial_balance", "balance_sheet"}:
         end = parse_date(request.args.get("as_of_date"), date.today())
@@ -1301,6 +1457,8 @@ def report_pdf():
         )
         if not data:
             abort(400, "Επιλέξτε λογαριασμό.")
+    elif kind == "olap":
+        data = olap_cube_from_request()
     else:
         if kind in {"trial_balance", "balance_sheet"}:
             end = parse_date(request.args.get("as_of_date"), date.today())
@@ -1326,6 +1484,20 @@ def report_pdf():
         as_attachment=True,
         download_name=filename,
     )
+
+
+@web.get("/reports/olap.csv")
+@company_required
+def report_olap_csv():
+    cube = olap_cube_from_request()
+    headers, rows = olap.cube_rows_as_table(cube)
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, delimiter=";")
+    writer.writerow(headers)
+    writer.writerows(rows)
+    filename = f"olap_{cube.spec.start.isoformat()}_{cube.spec.end.isoformat()}.csv"
+    return Response("\ufeff" + buffer.getvalue(), mimetype="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f"attachment; filename={filename}"})
 
 
 # Backups

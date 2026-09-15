@@ -1,5 +1,7 @@
 """Server-side PDF rendering for financial reports using fpdf2."""
 
+import functools
+import subprocess
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
@@ -7,21 +9,43 @@ from pathlib import Path
 from fpdf import FPDF
 
 from app.domain.types import ACCOUNT_TYPE_LABELS
+from app.web.pdf_charts import draw_chart
 
 
+FONT_CANDIDATES = (
+    ("C:/Windows/Fonts/arial.ttf", "C:/Windows/Fonts/arialbd.ttf"),
+    ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+    ("/usr/share/fonts/TTF/DejaVuSans.ttf", "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf"),
+    ("/usr/share/fonts/noto/NotoSans-Regular.ttf", "/usr/share/fonts/noto/NotoSans-Bold.ttf"),
+    ("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf", "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf"),
+    ("/usr/share/fonts/liberation/LiberationSans-Regular.ttf", "/usr/share/fonts/liberation/LiberationSans-Bold.ttf"),
+    ("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"),
+    ("/System/Library/Fonts/Supplemental/Arial.ttf", "/System/Library/Fonts/Supplemental/Arial Bold.ttf"),
+)
+
+
+def _fontconfig_match(pattern: str) -> Path | None:
+    """Ask fontconfig (Linux/macOS) for a TrueType file matching the pattern."""
+    try:
+        result = subprocess.run(["fc-match", "-f", "%{file}", pattern], capture_output=True, text=True,
+                                timeout=5, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    path = Path(result.stdout.strip())
+    return path if path.suffix.lower() == ".ttf" and path.exists() else None
+
+
+@functools.cache
 def find_fonts() -> tuple[Path, Path]:
-    candidates = (
-        (
-            Path("C:/Windows/Fonts/arial.ttf"),
-            Path("C:/Windows/Fonts/arialbd.ttf"),
-        ),
-        (
-            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
-            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
-        ),
-    )
-    for regular, bold in candidates:
-        if regular.exists() and bold.exists():
+    """Locate a Unicode (Greek-capable) regular/bold TTF pair, preferring well-known paths."""
+    for regular, bold in FONT_CANDIDATES:
+        if Path(regular).exists() and Path(bold).exists():
+            return Path(regular), Path(bold)
+    for family in ("DejaVu Sans", "Noto Sans", "Liberation Sans", "sans-serif"):
+        regular = _fontconfig_match(f"{family}:lang=el")
+        bold = _fontconfig_match(f"{family}:bold:lang=el")
+        if regular and bold:
             return regular, bold
     raise RuntimeError("Δεν βρέθηκε Unicode γραμματοσειρά για τη δημιουργία PDF.")
 
@@ -119,6 +143,7 @@ def build_report_pdf(kind: str, data: dict, company) -> tuple[bytes, str]:
         "income_statement": build_income_statement,
         "general_ledger": build_general_ledger,
         "journal": build_journal,
+        "olap": build_olap,
     }
     if kind not in builders:
         raise ValueError(f"Unknown report type: {kind}")
@@ -298,3 +323,54 @@ def journal_article_content(entry, company):
         for account, amount in entry["credits"]
     )
     return title, rows
+
+
+def build_olap(cube, company):
+    """Pivot table of an OLAP cube; landscape so wide column dimensions fit."""
+    from app.web.olap import cube_rows_as_table  # local import: olap imports the DB models
+
+    spec = cube.spec
+    pdf = ReportPDF("Κύβος OLAP", company.name, orientation="L")
+    pdf.add_page()
+    slices = " × ".join(dimension.label for dimension in cube.row_dimensions)
+    if cube.column_dimension:
+        slices += f" ανά {cube.column_dimension.label}"
+    add_period(pdf, f"{spec.start:%d/%m/%Y} έως {spec.end:%d/%m/%Y} · {slices}")
+
+    if not cube.is_empty:
+        chart = cube.chart
+        pdf.set_font("Report", "B", 8)
+        pdf.set_text_color(23, 42, 49)
+        caption = f"{chart['measure']['label']} ανά {chart['axis_label']}"
+        if chart["type"] == "heatmap":
+            caption += f" · γραμμές: {chart['series_label']}"
+        elif len(chart["series"]) > 1:
+            caption += f" · χρώμα: {chart['series_label']}"
+        pdf.cell(0, 5, caption)
+        pdf.ln(6)
+        usable_width = pdf.w - pdf.l_margin - pdf.r_margin
+        draw_chart(pdf, chart, company.currency, pdf.l_margin, pdf.get_y(), usable_width, 78)
+
+    headers, rows = cube_rows_as_table(cube)
+    label_columns = len(cube.row_dimensions)
+    usable = pdf.w - pdf.l_margin - pdf.r_margin
+    value_columns = len(headers) - label_columns
+    label_width = min(48, usable * 0.4 / label_columns)
+    value_width = (usable - label_width * label_columns) / max(value_columns, 1)
+    widths = [label_width] * label_columns + [value_width] * value_columns
+    aligns = ["L"] * label_columns + ["R"] * value_columns
+
+    def fmt(measure, raw):
+        return money(raw, company.currency) if measure.kind == "money" else f"{Decimal(raw):.0f}"
+
+    measures = cube.measures
+    body = []
+    for index, row in enumerate(rows):
+        is_total = index == len(rows) - 1
+        values = list(row[:label_columns])
+        for offset, raw in enumerate(row[label_columns:]):
+            values.append(fmt(measures[offset % len(measures)], raw))
+        summary = is_total or (index < len(cube.rows) and not cube.rows[index].is_leaf)
+        body.append({"summary": summary, "values": values})
+    add_table(pdf, headers, body, widths, aligns)
+    return pdf, f"olap-{spec.start.isoformat()}-{spec.end.isoformat()}.pdf"

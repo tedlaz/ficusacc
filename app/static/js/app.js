@@ -300,11 +300,47 @@ document.addEventListener('change', (event) => {
   if (!event.target.matches('[data-report-type]')) return
   const form = event.target.closest('form')
   const reportType = event.target.value
-  const usesPeriod = ['income_statement', 'journal'].includes(reportType)
+  const usesPeriod = ['income_statement', 'journal', 'olap'].includes(reportType)
   form.querySelector('[data-as-of]').hidden = !['trial_balance', 'balance_sheet'].includes(reportType)
   form.querySelectorAll('[data-period]').forEach((field) => { field.hidden = !usesPeriod })
   form.querySelector('[data-ledger]').hidden = reportType !== 'general_ledger'
 }, true)
+
+/* filter bars: submit on change, debounced while typing (htmx boosts the GET) */
+let autoSubmitTimer
+let autoSubmitFocus = null
+function requestAutoSubmit(form, delay) {
+  window.clearTimeout(autoSubmitTimer)
+  autoSubmitTimer = window.setTimeout(() => {
+    const field = document.activeElement
+    autoSubmitFocus = form.contains(field) && field.name
+      ? { name: field.name, caret: field.selectionStart ?? null }
+      : null
+    form.requestSubmit()
+  }, delay)
+}
+document.addEventListener('input', (event) => {
+  const form = event.target.closest('form[data-auto-submit]')
+  if (!form || event.target.matches('select')) return
+  requestAutoSubmit(form, 450)
+})
+document.addEventListener('change', (event) => {
+  const form = event.target.closest('form[data-auto-submit]')
+  if (form && event.target.matches('select')) requestAutoSubmit(form, 0)
+})
+document.addEventListener('htmx:afterSettle', () => {
+  // the boosted swap replaces the form: put the caret back where the user was typing
+  if (!autoSubmitFocus) return
+  const { name, caret } = autoSubmitFocus
+  autoSubmitFocus = null
+  const field = document.querySelector(`form[data-auto-submit] [name="${name}"]`)
+  if (!field) return
+  field.focus()
+  if (caret !== null && field.setSelectionRange) {
+    const position = Math.min(caret, field.value.length)
+    try { field.setSelectionRange(position, position) } catch (_error) { /* not a text field */ }
+  }
+})
 
 /* file drop zones: drag feedback */
 document.addEventListener('dragover', (event) => {

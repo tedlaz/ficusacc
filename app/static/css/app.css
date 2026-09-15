@@ -651,6 +651,102 @@ input:user-invalid { border-color: var(--red); box-shadow: 0 0 0 4px #a6403622; 
 .form-foot a { color: var(--teal); font-weight: 700; }
 
 /* ---------- responsive ---------- */
+
+/* ---------- list filters ---------- */
+.filter-bar { display: grid; gap: 10px; margin-bottom: 16px; padding: 14px 16px; box-shadow: none; }
+.filter-row { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 12px; }
+.filter-bar label { display: grid; flex: 1 1 130px; gap: 4px; color: var(--muted); font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.filter-bar label.filter-grow { flex: 3 1 240px; }
+.filter-bar input, .filter-bar select { width: 100%; font-size: .9rem; }
+.filter-bar input[type="search"]::-webkit-search-cancel-button { cursor: pointer; }
+.filter-actions { display: flex; flex: 0 0 auto; gap: 6px; align-self: end; }
+
+/* ---------- OLAP cube builder ---------- */
+.olap-builder { grid-column: 1 / -1; margin: 6px 0 0; border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px 18px; background: linear-gradient(145deg, #fffdf8, #fbf5ea); animation: rise .35s var(--ease-out) both; }
+.olap-builder legend { padding: 0 6px; }
+.olap-builder-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
+.olap-block { display: grid; align-content: start; gap: 9px; }
+.olap-block-title { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 4px 0 0; color: var(--ink); font-size: .8rem; font-weight: 800; }
+.olap-block-title small { color: var(--muted); font-size: .68rem; font-weight: 600; }
+.olap-field { display: grid; gap: 4px; font-size: .78rem; font-weight: 700; color: var(--muted); }
+.olap-field > span { text-transform: uppercase; font-size: .66rem; letter-spacing: .06em; }
+.olap-field select, .olap-field input { width: 100%; }
+.olap-inline { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.olap-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.olap-chip { position: relative; display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 99px; padding: 5px 11px; background: #fff; font-size: .76rem; font-weight: 700; color: var(--muted); cursor: pointer; transition: background .18s, border-color .18s, color .18s, transform .18s var(--spring); user-select: none; --pill: var(--accent); }
+.olap-chip input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.olap-chip:hover { border-color: var(--pill); transform: translateY(-1px); }
+.olap-chip:has(input:checked) { border-color: var(--pill); background: color-mix(in oklab, var(--pill) 14%, #fff); color: var(--ink); }
+.olap-chip:has(input:focus-visible) { box-shadow: var(--focus-ring); }
+.olap-chip:has(input:disabled) { cursor: default; }
+.olap-chart-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
+.olap-chart-option { position: relative; display: grid; justify-items: center; gap: 5px; border: 1px solid var(--line); border-radius: 10px; padding: 9px 6px 7px; background: #fff; font-size: .7rem; font-weight: 700; color: var(--muted); text-align: center; cursor: pointer; transition: border-color .18s, background .18s, color .18s, transform .18s var(--spring); }
+.olap-chart-option input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.olap-chart-option:hover { border-color: var(--accent); transform: translateY(-1px); }
+.olap-chart-option:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
+.olap-chart-option:has(input:focus-visible) { box-shadow: var(--focus-ring); }
+.olap-chart-glyph { width: 34px; height: 22px; border-radius: 3px; background-repeat: no-repeat; opacity: .85; }
+.olap-chart-glyph-bar { background: linear-gradient(var(--teal-2), var(--teal-2)) 2px 8px / 6px 14px no-repeat, linear-gradient(var(--indigo-2), var(--indigo-2)) 10px 2px / 6px 20px no-repeat, linear-gradient(var(--teal-2), var(--teal-2)) 18px 11px / 6px 11px no-repeat, linear-gradient(var(--indigo-2), var(--indigo-2)) 26px 5px / 6px 17px no-repeat; }
+.olap-chart-glyph-stacked { background: linear-gradient(to top, var(--teal-2) 50%, var(--indigo-2) 50%) 2px 6px / 8px 16px no-repeat, linear-gradient(to top, var(--teal-2) 35%, var(--indigo-2) 35%) 13px 2px / 8px 20px no-repeat, linear-gradient(to top, var(--teal-2) 60%, var(--indigo-2) 60%) 24px 9px / 8px 13px no-repeat; }
+.olap-chart-glyph-stacked100 { background: linear-gradient(to top, var(--teal-2) 40%, var(--indigo-2) 40%) 2px 0 / 8px 22px no-repeat, linear-gradient(to top, var(--teal-2) 70%, var(--indigo-2) 70%) 13px 0 / 8px 22px no-repeat, linear-gradient(to top, var(--teal-2) 25%, var(--indigo-2) 25%) 24px 0 / 8px 22px no-repeat; }
+.olap-chart-glyph-line { background: linear-gradient(to top right, transparent 47%, var(--indigo-2) 47%, var(--indigo-2) 53%, transparent 53%) 0 0 / 17px 22px no-repeat, linear-gradient(to bottom right, transparent 47%, var(--indigo-2) 47%, var(--indigo-2) 53%, transparent 53%) 17px 0 / 17px 22px no-repeat; }
+.olap-chart-glyph-area { background: linear-gradient(to top right, var(--teal-2) 50%, transparent 50%) 0 0 / 17px 22px no-repeat, linear-gradient(to top left, var(--teal-2) 50%, transparent 50%) 17px 0 / 17px 22px no-repeat; opacity: .6; }
+.olap-chart-glyph-donut { width: 22px; height: 22px; border-radius: 50%; background: conic-gradient(var(--teal-2) 0 40%, var(--indigo-2) 40% 75%, var(--orange-2) 75%); mask: radial-gradient(circle, transparent 42%, #000 44%); }
+.olap-chart-glyph-heatmap { background: linear-gradient(90deg, #fbf0dc 0 25%, #eab266 25% 50%, #c9822f 50% 75%, #a85c0e 75%) 0 0 / 34px 10px no-repeat, linear-gradient(90deg, #c9822f 0 25%, #fbf0dc 25% 50%, #a85c0e 50% 75%, #eab266 75%) 0 12px / 34px 10px no-repeat; }
+.olap-csv-link { display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; color: var(--accent); font-size: .78rem; font-weight: 800; }
+.olap-csv-link .ui-icon { width: 15px; height: 15px; }
+
+/* ---------- OLAP report ---------- */
+.olap-head { flex-wrap: wrap; align-items: flex-start; }
+.olap-head-by { color: var(--muted); font-weight: 500; }
+.olap-kpis { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px 26px; }
+.olap-chart-panel { position: relative; margin-bottom: 22px; border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px 12px; background: linear-gradient(160deg, #fffdf8 40%, #fbf3e6); }
+.olap-chart-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px 20px; margin-bottom: 8px; }
+.olap-chart-head .eyebrow { margin: 0; }
+.olap-chart-legend { display: flex; flex-wrap: wrap; gap: 2px 4px; }
+.olap-chart-stage { position: relative; min-height: 160px; }
+.olap-chart { display: block; width: 100%; height: auto; }
+.olap-grid { stroke: #17211d12; stroke-width: 1; }
+.olap-zero { stroke: #17211d40; stroke-width: 1.2; }
+.olap-x-label { text-transform: none; }
+.olap-hit-area { fill: transparent; transition: fill .15s; }
+.olap-hit { outline: none; cursor: default; }
+.olap-hit:hover .olap-hit-area, .olap-hit:focus-visible .olap-hit-area { fill: #17211d0a; }
+.olap-hit:focus-visible .olap-hit-area { stroke: var(--accent); stroke-width: 1.5; }
+.olap-bar { transform-box: fill-box; transform-origin: bottom; animation: olap-grow .55s var(--ease-out) both; }
+.olap-chart-stacked .olap-bar, .olap-chart-stacked100 .olap-bar { animation-name: olap-fade; }
+.olap-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 1; animation: olap-draw 1s var(--ease-out) forwards; }
+.olap-area { opacity: .12; animation: olap-fade .8s var(--ease-out) both; }
+.olap-marker { animation: olap-fade .5s .55s var(--ease-out) both; }
+.olap-donut-slice { transform-box: fill-box; transform-origin: center; animation: olap-fade .5s var(--ease-out) both; transition: opacity .15s; }
+.olap-slice:hover .olap-donut-slice, .olap-slice:focus-visible .olap-donut-slice { opacity: .8; }
+.olap-heat-cell { transition: opacity .15s; animation: olap-fade .5s var(--ease-out) both; }
+.olap-cell-hit:hover .olap-heat-cell, .olap-cell-hit:focus-visible .olap-heat-cell { opacity: .78; }
+.olap-heat-value { font: 700 11px var(--font-sans); font-variant-numeric: tabular-nums; pointer-events: none; }
+.olap-heat-row-label { fill: var(--ink); font: 700 11px var(--font-sans); }
+.olap-direct-label { fill: var(--ink); font: 700 11px var(--font-sans); font-variant-numeric: tabular-nums; pointer-events: none; }
+.olap-hero { fill: var(--ink); font: 700 30px var(--font-sans); }
+.olap-hero-label { fill: var(--muted); font: 700 11px var(--font-sans); letter-spacing: .06em; text-transform: uppercase; }
+.olap-legend-end { text-anchor: start; }
+.olap-chart.is-static * { animation: none !important; stroke-dashoffset: 0 !important; }
+@keyframes olap-grow { from { transform: scaleY(0); } }
+@keyframes olap-fade { from { opacity: 0; } }
+@keyframes olap-draw { to { stroke-dashoffset: 0; } }
+.olap-table-wrap { max-height: 70vh; overflow: auto; }
+.olap-table th { position: sticky; top: 0; z-index: 2; background: var(--panel); }
+.olap-table .olap-col-groups th { top: 0; }
+.olap-table thead tr:nth-child(2) th { top: 37px; }
+.olap-th-dim { min-width: 160px; }
+.olap-th-col { border-left: 1px solid var(--line); text-align: center; }
+.olap-th-measure { font-size: .68rem; white-space: nowrap; }
+.olap-th-total, .olap-cell-total { border-left: 1px solid var(--line); background: #faf7ef; }
+.olap-td-dim { white-space: nowrap; }
+.olap-cell.is-zero { color: #b7bdb6; font-weight: 500; }
+.olap-cell.negative, .olap-table th.negative { color: var(--coral); }
+.olap-table tr.is-linked td { background: var(--accent-soft); }
+.olap-row-level-0 td.olap-td-dim { font-weight: 800; }
+.olap-empty { min-height: 260px; }
+
 @media (max-width: 1250px) {
   .quick-head { display: none; }
   .quick-cell > span { display: block; }
@@ -659,6 +755,7 @@ input:user-invalid { border-color: var(--red); box-shadow: 0 0 0 4px #a6403622; 
 }
 
 @media (max-width: 1100px) {
+  .olap-builder-grid { grid-template-columns: 1fr 1fr; }
   .flow-kpis { grid-template-columns: repeat(2, auto); }
   .stat-grid { grid-template-columns: repeat(2, 1fr); }
   .card-grid { grid-template-columns: repeat(2, 1fr); }
@@ -692,6 +789,12 @@ input:user-invalid { border-color: var(--red); box-shadow: 0 0 0 4px #a6403622; 
 }
 
 @media (max-width: 620px) {
+  .filter-bar label { flex-basis: 100%; }
+  .filter-actions { width: 100%; justify-content: flex-end; }
+  .olap-builder-grid { grid-template-columns: 1fr; }
+  .olap-inline { grid-template-columns: 1fr; }
+  .olap-chart-panel { padding: 14px 10px 10px; }
+  .olap-table-wrap { overflow: auto; }
   .stat-grid { grid-template-columns: 1fr; }
   .stat-card { min-height: 130px; }
   .stat-card strong { margin: 13px 0 8px; }
