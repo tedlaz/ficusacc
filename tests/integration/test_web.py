@@ -156,6 +156,43 @@ def test_account_crud_and_csv(client, csrf, logged_in, app):
     with Session(app.extensions["sqlmodel_engine"]) as db:
         assert len(list(db.exec(select(AccountModel)).all())) == 2
 
+    # Parents: explicit 4th column, auto-link by code prefix (even when the header comes later), unknown parent.
+    rows = "\n".join((
+        "code,name,account_type,parent_code",
+        '"10.00.01","Μετρητά, ταμείο","asset",',
+        '"10","Ταμειακά","asset",',
+        '"10.00.02","Κάρτα","asset","10"',
+        '"10.00.03","Άγνωστος","asset","99"',
+    ))
+    imported = client.post("/accounts/import", data={"csrf_token": csrf, "file": (bytes_io(rows), "a.csv")},
+                           content_type="multipart/form-data")
+    assert imported.status_code == 302
+    with Session(app.extensions["sqlmodel_engine"]) as db:
+        by_code = {a.code: a for a in db.exec(select(AccountModel)).all()}
+    assert by_code["10.00.01"].name == "Μετρητά, ταμείο"
+    assert by_code["10.00.01"].parent_id == by_code["10"].id
+    assert by_code["10.00.02"].parent_id == by_code["10"].id
+    assert by_code["10.00.03"].parent_id == by_code["10"].id  # unknown parent falls back to the prefix
+    assert by_code["10"].parent_id is None
+    exported = client.get("/accounts/export")
+    assert '"10.00.02","Κάρτα","asset","10"' in exported.text
+    assert '"10","Ταμειακά","asset",""' in exported.text
+    page = client.get("/accounts")
+    assert '<span class="code" title="Ταμειακά">10</span>' in page.text
+
+    # Form: empty parent on a new account is auto-suggested; self-parent is rejected on edit.
+    response = client.post("/accounts/new", data={"csrf_token": csrf, "code": "10.00.04", "name": "Νέος",
+                                                  "account_type": "asset", "parent_id": ""})
+    assert response.status_code == 302
+    with Session(app.extensions["sqlmodel_engine"]) as db:
+        new = db.exec(select(AccountModel).where(AccountModel.code == "10.00.04")).one()
+        assert new.parent_id == by_code["10"].id
+        new_id = new.id
+    response = client.post(f"/accounts/{new_id}/edit", data={"csrf_token": csrf, "code": "10.00.04", "name": "Νέος",
+                                                            "account_type": "asset", "parent_id": str(new_id),
+                                                            "editing": "1", "is_active": "on"})
+    assert response.status_code == 422
+
 
 def test_balanced_transaction_post_and_reports(client, csrf, logged_in, app):
     company_id = logged_in[1]
@@ -558,6 +595,14 @@ def test_trial_balance_builds_dotted_account_summary_levels(client, logged_in, a
         counter = AccountModel(
             company_id=company_id, code="50.00.01", name="Supplier", account_type="liability"
         )
+        group = AccountModel(company_id=company_id, code="38", name="Χρηματικά διαθέσιμα", account_type="asset")
+        db.add(group)
+        db.flush()
+        subgroup = AccountModel(company_id=company_id, code="38.00", name="Ταμείο και τράπεζες",
+                                account_type="asset", parent_id=group.id)
+        db.add(subgroup)
+        db.flush()
+        cash.parent_id = bank.parent_id = subgroup.id
         db.add(cash)
         db.add(bank)
         db.add(counter)
@@ -603,6 +648,9 @@ def test_trial_balance_builds_dotted_account_summary_levels(client, logged_in, a
     ).group(1)
     assert summary_38.count("150,00 €") == 2
     assert summary_3800.count("150,00 €") == 2
+    assert "Χρηματικά διαθέσιμα" in summary_38
+    assert "Ταμείο και τράπεζες" in summary_3800
+    assert "Σύνολο 38" not in response.text
     assert f'href="/accounts/{cash_id}/ledger"' in response.text
     assert f'href="/accounts/{bank_id}/ledger"' in response.text
     assert "/accounts/None/ledger" not in response.text

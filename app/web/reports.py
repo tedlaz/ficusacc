@@ -10,6 +10,7 @@ from sqlmodel import Session, func, select
 
 from app.domain.types import AccountType
 from app.infrastructure.database.models import AccountModel, TransactionModel
+from app.web.account_tree import prefix_names
 
 
 @dataclass
@@ -133,11 +134,14 @@ def monthly_flows(db: Session, company_id: int, as_of: date, months: int = 12) -
 
 
 def trial_balance(db: Session, company_id: int, as_of: date, include_summaries: bool = False):
-    accounts = [item for item in account_balances(db, company_id, as_of).values() if item.balance]
+    balances = account_balances(db, company_id, as_of)
+    accounts = [item for item in balances.values() if item.balance]
     total_debits = sum((item.debit_total for item in accounts), Decimal("0"))
     total_credits = sum((item.credit_total for item in accounts), Decimal("0"))
 
     if include_summaries:
+        # Header accounts usually carry no balance of their own, so name prefixes from the whole chart.
+        names = prefix_names(item.account for item in balances.values())
         account_by_code = {item.account.code: item.account for item in accounts}
         parent_codes = set()
         grouped = {}
@@ -168,7 +172,7 @@ def trial_balance(db: Session, company_id: int, as_of: date, include_summaries: 
             account = account_by_code.get(code) or SummaryAccount(
                 id=None,
                 code=code,
-                name=f"Σύνολο {code}",
+                name=names.get(code) or f"Σύνολο {code}",
                 account_type=aggregate["account_type"],
             )
             rows.append(

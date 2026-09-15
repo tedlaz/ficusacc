@@ -157,3 +157,43 @@ def test_pdf_embeds_a_chart_for_every_chart_type():
                                 "measures": ("natural", "lines"), "chart": chart, "limit": 3})
         content, filename = build_report_pdf("olap", olap.build_cube(facts, spec), Company())
         assert content.startswith(b"%PDF") and filename.endswith(".pdf"), chart
+
+
+def test_group_labels_use_parent_names_when_present():
+    plain = fact(date(2026, 1, 1), "1", code="64.00.01")
+    assert olap.DIMENSIONS["account_group"].member_of(plain).label == "Ομάδα 64"
+    assert olap.DIMENSIONS["account_subgroup"].member_of(plain).label == "Υποομάδα 64.00"
+    named = olap.Fact(**{**plain.__dict__, "group_name": "Διάφορα έξοδα", "subgroup_name": "Έξοδα μεταφορών"})
+    group = olap.DIMENSIONS["account_group"].member_of(named)
+    assert (group.key, group.label) == ("64", "64 · Διάφορα έξοδα")
+    assert olap.DIMENSIONS["account_subgroup"].member_of(named).label == "64.00 · Έξοδα μεταφορών"
+
+
+def test_cube_names_groups_from_header_accounts(app, seeded):
+    user_id, company_id = seeded
+    with Session(app.extensions["sqlmodel_engine"]) as db:
+        header = AccountModel(company_id=company_id, code="64", name="Διάφορα έξοδα", account_type="expense",
+                              is_active=False)
+        db.add(header)
+        db.flush()
+        sub = AccountModel(company_id=company_id, code="64.00", name="Έξοδα μεταφορών", account_type="expense",
+                           parent_id=header.id)
+        cash = AccountModel(company_id=company_id, code="38.00", name="Ταμείο", account_type="asset")
+        db.add_all([sub, cash])
+        db.flush()
+        leaf = AccountModel(company_id=company_id, code="64.00.01", name="Ταξί", account_type="expense",
+                            parent_id=sub.id)
+        db.add(leaf)
+        db.flush()
+        transaction = TransactionModel(company_id=company_id, created_by_id=user_id, transaction_date=date(2026, 3, 1),
+                                       description="t", is_posted=True)
+        db.add(transaction)
+        db.flush()
+        db.add(TransactionLineModel(transaction_id=transaction.id, account_id=leaf.id, amount=Decimal("30")))
+        db.add(TransactionLineModel(transaction_id=transaction.id, account_id=cash.id, amount=Decimal("-30")))
+        db.commit()
+
+        spec = olap.CubeSpec(start=date(2026, 1, 1), end=date(2026, 12, 31),
+                             rows=("account_group", "account_subgroup"), account_types=("expense",))
+        cube = olap.olap_cube(db, company_id, spec)
+    assert [row.members[-1].label for row in cube.rows] == ["64 · Διάφορα έξοδα", "64.00 · Έξοδα μεταφορών"]

@@ -480,6 +480,7 @@ input:user-invalid { border-color: var(--red); box-shadow: 0 0 0 4px #a6403622; 
 .remove-line:hover, .remove-line:focus-visible { color: var(--red); background: var(--red-soft); outline: none; }
 .remove-line:hover .ui-icon { transform: rotate(90deg); }
 .hint { margin: -7px 0 0; color: var(--muted); font-size: .8rem; }
+.field-hint { color: var(--muted); font-size: .74rem; font-weight: 500; line-height: 1.35; }
 .balance-strip { display: grid; grid-template-columns: 1fr 1fr auto; align-items: center; gap: 14px; border-radius: 10px; padding: 13px 16px; background: #edeee8; transition: background .3s; }
 .balance-strip span, .balance-strip strong { display: block; }
 .balance-strip strong { font-variant-numeric: tabular-nums; text-align: right; transition: color .2s; }

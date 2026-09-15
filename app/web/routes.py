@@ -28,9 +28,9 @@ from flask import (
     session,
     url_for,
 )
+from sqlalchemy import String, case, cast, or_
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import selectinload
-from sqlalchemy import String, case, cast, or_
 from sqlmodel import col, func, select
 
 from app.core.security import hash_password, verify_password
@@ -44,7 +44,7 @@ from app.infrastructure.database.models import (
     UserCompanyAccessModel,
     UserModel,
 )
-from app.web import journal_export, olap, reports
+from app.web import account_tree, journal_export, olap, reports
 from app.web.auth import company_required, login_required, superuser_required
 from app.web.pdf_reports import build_report_pdf
 
@@ -716,12 +716,18 @@ def accounts_index():
                 .distinct()
             ).all()
         )
+    parent_ids = {account.parent_id for account in accounts if account.parent_id is not None}
+    parents = {
+        parent.id: parent
+        for parent in db.exec(select(AccountModel).where(col(AccountModel.id).in_(parent_ids))).all()
+    } if parent_ids else {}
     pagination = {"page": page, "pages": pages, "total": total}
     return render_template(
         "accounts/index.html",
         accounts=accounts,
         balances=balances,
         used_account_ids=used_account_ids,
+        parents=parents,
         pagination=pagination,
     )
 
@@ -841,12 +847,19 @@ def save_account(account, accounts):
     except ValueError:
         flash("Επιλέξτε έγκυρο τύπο λογαριασμού.", "error")
         return render_template("accounts/form.html", account=account, accounts=accounts), 422
-    parent_id = request.form.get("parent_id", type=int)
+    parent_id = request.form.get("parent_id", type=int) or None
+    if parent_id is not None:
+        if (account is not None and parent_id == account.id) or parent_id not in {a.id for a in accounts}:
+            flash("Μη έγκυρος γονικός λογαριασμός.", "error")
+            return render_template("accounts/form.html", account=account, accounts=accounts), 422
+    elif account is None:  # new account: default to the longest matching code prefix ("64.00" for "64.00.01")
+        suggested = account_tree.suggest_parent(code, accounts)
+        parent_id = suggested.id if suggested else None
     if account is None:
         account = AccountModel(company_id=g.company.id, code=code,
                                name=request.form.get("name", "").strip(), account_type=kind)
     account.code, account.name, account.account_type = code, request.form.get("name", "").strip(), kind
-    account.parent_id = parent_id or None
+    account.parent_id = parent_id
     account.description = request.form.get("description", "").strip() or None
     account.is_active = "is_active" in request.form if request.form.get("editing") else True
     account.updated_at = datetime.now(timezone.utc)
@@ -888,9 +901,11 @@ def accounts_export():
                                   .order_by(AccountModel.code)).all())
     output = io.StringIO(newline="")
     writer = csv.writer(output, lineterminator="\n", quoting=csv.QUOTE_ALL)
-    output.write("code,name,account_type\n")
+    by_id = {account.id: account for account in accounts}
+    output.write("code,name,account_type,parent_code\n")
     for account in accounts:
-        writer.writerow([account.code, account.name, account.account_type.value])
+        parent = by_id.get(account.parent_id)
+        writer.writerow([account.code, account.name, account.account_type.value, parent.code if parent else ""])
     return Response(output.getvalue(), mimetype="text/csv",
                     headers={"Content-Disposition": "attachment; filename=chart_of_accounts.csv"})
 
@@ -919,26 +934,40 @@ def accounts_import():
     lines = [line for line in uploaded.read().decode("utf-8-sig").splitlines() if line.strip()]
     if lines and "code" in lines[0].lower():
         lines = lines[1:]
+    db = get_db()
+    existing = list(db.exec(select(AccountModel).where(AccountModel.company_id == g.company.id)).all())
+    by_code = {account.code: account for account in existing}
     created, errors = 0, []
-    for number, line in enumerate(lines, start=2):
-        values = [value.strip().strip('"') for value in line.split(",")]
+    pending: list[tuple[int, AccountModel, str]] = []  # parents are resolved after every row exists
+    for number, values in enumerate(csv.reader(lines), start=2):
+        values = [value.strip() for value in values]
         if len(values) < 3:
             errors.append(f"Γραμμή {number}: Απαιτούνται 3 στήλες")
             continue
         code, name, raw_type = values[:3]
+        parent_code = values[3] if len(values) > 3 else ""
         try:
             kind = AccountType(raw_type.lower())
         except ValueError:
             errors.append(f'Γραμμή {number}: Μη έγκυρος τύπος "{raw_type}"')
             continue
-        if get_db().exec(select(AccountModel).where(AccountModel.company_id == g.company.id,
-                                                     AccountModel.code == code)).first():
+        if code in by_code:
             errors.append(f"Account with code '{code}' already exists")
             continue
-        get_db().add(AccountModel(company_id=g.company.id, code=code, name=name, account_type=kind))
-        get_db().flush()
+        account = AccountModel(company_id=g.company.id, code=code, name=name, account_type=kind)
+        db.add(account)
+        db.flush()
+        by_code[code] = account
+        pending.append((number, account, parent_code))
         created += 1
-    get_db().commit()
+    for number, account, parent_code in pending:
+        parent = by_code.get(parent_code) if parent_code else None
+        if parent_code and parent is None:
+            errors.append(f'Γραμμή {number}: Άγνωστος γονικός "{parent_code}"')
+        if parent is None or parent.id == account.id:
+            parent = account_tree.suggest_parent(account.code, by_code.values(), exclude_id=account.id)
+        account.parent_id = parent.id if parent else None
+    db.commit()
     flash(f"Δημιουργήθηκαν {created} λογαριασμοί.", "success")
     for error in errors[:5]:
         flash(error, "error")

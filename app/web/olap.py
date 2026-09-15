@@ -23,6 +23,7 @@ from app.infrastructure.database.models import (
     TransactionModel,
     UserModel,
 )
+from app.web.account_tree import code_prefix, prefix_names
 
 ZERO = Decimal(0)
 MAX_ROW_DIMENSIONS = 3
@@ -45,6 +46,8 @@ class Fact:
     is_posted: bool
     reference: str
     user: str
+    group_name: str | None = None  # names from parent (header) accounts, see account_tree
+    subgroup_name: str | None = None
 
 
 @dataclass(frozen=True, order=True)
@@ -130,18 +133,16 @@ def _member_account_type(fact: Fact) -> Member:
     return Member((order,), fact.account_type.value, fact.account_type.label)
 
 
-def _code_prefix(code: str, depth: int) -> str:
-    return ".".join(code.split(".")[:depth])
-
-
 def _member_account_group(fact: Fact) -> Member:
-    prefix = _code_prefix(fact.account_code, 1)
-    return Member((prefix,), prefix, f"Ομάδα {prefix}")
+    prefix = code_prefix(fact.account_code, 1)
+    label = f"{prefix} · {fact.group_name}" if fact.group_name else f"Ομάδα {prefix}"
+    return Member((prefix,), prefix, label)
 
 
 def _member_account_subgroup(fact: Fact) -> Member:
-    prefix = _code_prefix(fact.account_code, 2)
-    return Member((prefix,), prefix, f"Υποομάδα {prefix}")
+    prefix = code_prefix(fact.account_code, 2)
+    label = f"{prefix} · {fact.subgroup_name}" if fact.subgroup_name else f"Υποομάδα {prefix}"
+    return Member((prefix,), prefix, label)
 
 
 def _member_account(fact: Fact) -> Member:
@@ -274,6 +275,9 @@ def load_facts(db: Session, company_id: int, spec: CubeSpec) -> list[Fact]:
         statement = statement.where(AccountModel.account_type.in_(spec.account_types))
     if spec.code_prefix:
         statement = statement.where(AccountModel.code.startswith(spec.code_prefix))
+    rows = db.exec(statement).all()
+    # Header accounts may sit outside the type/prefix filters, so name prefixes from the whole chart.
+    names = prefix_names(db.exec(select(AccountModel).where(AccountModel.company_id == company_id)).all()) if rows else {}
     return [
         Fact(
             transaction_id=transaction.id,
@@ -285,8 +289,10 @@ def load_facts(db: Session, company_id: int, spec: CubeSpec) -> list[Fact]:
             is_posted=transaction.is_posted,
             reference=transaction.reference or "",
             user=user.full_name,
+            group_name=names.get(code_prefix(account.code, 1)),
+            subgroup_name=names.get(code_prefix(account.code, 2)),
         )
-        for line, transaction, account, user in db.exec(statement).all()
+        for line, transaction, account, user in rows
     ]
 
 
