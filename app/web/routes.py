@@ -38,13 +38,14 @@ from app.domain.types import AccountType
 from app.extensions import fold_text, get_db, reset_engine
 from app.infrastructure.database.models import (
     AccountModel,
+    BalanceConfirmationModel,
     CompanyModel,
     TransactionLineModel,
     TransactionModel,
     UserCompanyAccessModel,
     UserModel,
 )
-from app.web import account_tree, journal_export, olap, reports, settings
+from app.web import account_tree, balance_locks, journal_export, olap, reports, settings
 from app.web.auth import company_required, login_required, superuser_required
 from app.web.pdf_reports import build_report_pdf
 
@@ -55,16 +56,24 @@ PAGE_SIZE = 25
 GREEK_MONTHS_SHORT = ("Ιαν", "Φεβ", "Μαρ", "Απρ", "Μαι", "Ιουν", "Ιουλ", "Αυγ", "Σεπ", "Οκτ", "Νοε", "Δεκ")
 
 
-def finish_list():
-    """Return to the transactions list, keeping the filters the row action came from."""
+def finish_back(prefix: str, endpoint: str):
+    """Return to the list page a row action came from (its `next` field: filters + page), else the endpoint."""
     target = request.form.get("next") or ""
-    if target.startswith("/transactions") and not target.startswith("//"):
+    if target.startswith(prefix) and not target.startswith("//"):
         if request.headers.get("HX-Request"):
             response = make_response("")
             response.headers["HX-Redirect"] = target
             return response
         return redirect(target)
-    return finish("web.transactions_index")
+    return finish(endpoint)
+
+
+def finish_list():
+    return finish_back("/transactions", "web.transactions_index")
+
+
+def finish_accounts():
+    return finish_back("/accounts", "web.accounts_index")
 
 
 def finish(endpoint: str, **values):
@@ -683,20 +692,39 @@ def change_password():
 
 
 # Accounts
+ACCOUNT_STATUSES = {"active", "inactive"}
+
+
+def account_filters():
+    args = request.args
+    raw_type = args.get("type", "")
+    return {
+        "code": args.get("code", "").strip(),
+        "type": raw_type if raw_type in {kind.value for kind in AccountType} else "",
+        "status": args.get("status") if args.get("status") in ACCOUNT_STATUSES else "",
+    }
+
+
 @web.get("/accounts")
 @company_required
 def accounts_index():
     db = get_db()
-    total = db.exec(
-        select(func.count()).select_from(AccountModel).where(AccountModel.company_id == g.company.id)
-    ).one()
+    filters = account_filters()
+    conditions = [AccountModel.company_id == g.company.id]
+    if filters["code"]:
+        conditions.append(col(AccountModel.code).startswith(filters["code"]))
+    if filters["type"]:
+        conditions.append(AccountModel.account_type == AccountType(filters["type"]))
+    if filters["status"]:
+        conditions.append(AccountModel.is_active == (filters["status"] == "active"))
+    total = db.exec(select(func.count()).select_from(AccountModel).where(*conditions)).one()
     page = max(request.args.get("page", 1, type=int) or 1, 1)
     pages = max((total + PAGE_SIZE - 1) // PAGE_SIZE, 1)
     page = min(page, pages)
     accounts = list(
         db.exec(
             select(AccountModel)
-            .where(AccountModel.company_id == g.company.id)
+            .where(*conditions)
             .order_by(AccountModel.code)
             .offset((page - 1) * PAGE_SIZE)
             .limit(PAGE_SIZE)
@@ -744,6 +772,9 @@ def accounts_index():
         used_account_ids=used_account_ids,
         parents=parents,
         pagination=pagination,
+        lock_dates=balance_locks.lock_dates(db, g.company.id),
+        filters=filters,
+        is_filtered=any(filters.values()),
     )
 
 
@@ -816,13 +847,65 @@ def get_account_ledger_data(
         .join(TransactionModel, TransactionModel.id == TransactionLineModel.transaction_id)
         .where(*filters)
     ).one()
+    last_movement = db.exec(
+        select(func.max(TransactionModel.transaction_date))
+        .select_from(TransactionLineModel)
+        .join(TransactionModel, TransactionModel.id == TransactionLineModel.transaction_id)
+        .where(*filters)
+    ).one()
     pagination = {"page": page, "pages": pages, "total": total}
     return {
         "account": account,
         "entries": entries,
         "current_balance": current_balance,
+        "last_movement_date": date.fromisoformat(str(last_movement)) if last_movement else date.today(),
         "pagination": pagination,
+        "locked_until": balance_locks.lock_date(db, account.id),
+        "confirmations": balance_locks.confirmations(db, account.id),
     }
+
+
+@web.post("/accounts/<int:account_id>/confirm-balance")
+@company_required
+def account_confirm_balance(account_id):
+    db = get_db()
+    account = db.exec(select(AccountModel).where(AccountModel.id == account_id,
+                                                 AccountModel.company_id == g.company.id)).first()
+    if not account:
+        abort(404)
+    try:
+        as_of = parse_date(request.form.get("as_of_date", ""))
+        declared = Decimal(request.form.get("balance", "").replace(",", "."))
+    except (ValueError, InvalidOperation):
+        flash("Δώστε έγκυρη ημερομηνία και υπόλοιπο.", "error")
+        return finish("web.account_ledger", account_id=account.id)
+    try:
+        balance_locks.confirm(db, g.company.id, account, as_of, declared, g.user.id)
+    except balance_locks.BalanceMismatch as mismatch:
+        flash(f"Υπολογισμένο υπόλοιπο {money(mismatch.computed)}, δηλωμένο {money(mismatch.declared)} "
+              f"(διαφορά {money(mismatch.difference)}). Δεν έγινε επιβεβαίωση.", "error")
+        return finish("web.account_ledger", account_id=account.id)
+    db.commit()
+    flash(f"Το υπόλοιπο {money(declared)} επιβεβαιώθηκε έως {as_of.strftime('%d/%m/%Y')}. "
+          "Οι κινήσεις έως τότε είναι κλειδωμένες.", "success")
+    return finish("web.account_ledger", account_id=account.id)
+
+
+@web.post("/accounts/<int:account_id>/confirm-balance/<int:confirmation_id>/delete")
+@superuser_required
+@company_required
+def account_confirmation_delete(account_id, confirmation_id):
+    db = get_db()
+    confirmation = db.get(BalanceConfirmationModel, confirmation_id)
+    if not confirmation or confirmation.account_id != account_id or confirmation.company_id != g.company.id:
+        abort(404)
+    if confirmation.as_of_date != balance_locks.lock_date(db, account_id):
+        flash("Διαγράφεται μόνο η πιο πρόσφατη επιβεβαίωση.", "error")
+        return finish("web.account_ledger", account_id=account_id)
+    db.delete(confirmation)
+    db.commit()
+    flash("Η επιβεβαίωση διαγράφηκε· ο λογαριασμός ξεκλειδώθηκε έως την προηγούμενη.", "success")
+    return finish("web.account_ledger", account_id=account_id)
 
 
 @web.route("/accounts/new", methods=["GET", "POST"])
@@ -881,7 +964,7 @@ def save_account(account, accounts):
     db.add(account)
     db.commit()
     flash("Ο λογαριασμός αποθηκεύτηκε.", "success")
-    return finish("web.accounts_index")
+    return finish_accounts()
 
 
 @web.post("/accounts/<int:account_id>/delete")
@@ -902,11 +985,11 @@ def account_delete(account_id):
     ).first()
     if has_movements is not None:
         flash("Ο λογαριασμός έχει κινήσεις και δεν μπορεί να διαγραφεί.", "error")
-        return finish("web.accounts_index")
+        return finish_accounts()
     get_db().delete(account)
     get_db().commit()
     flash("Ο λογαριασμός διαγράφηκε.", "success")
-    return finish("web.accounts_index")
+    return finish_accounts()
 
 
 @web.get("/accounts/export")
@@ -1140,9 +1223,12 @@ def transactions_index():
     accounts = list(db.exec(select(AccountModel).where(AccountModel.company_id == g.company.id)).all())
     pagination = {"page": page, "pages": pages, "total": total}
     export_end = date.today()
+    locks = balance_locks.lock_dates(db, g.company.id)
+    locked_ids = {t.id for t in transactions
+                  if any(l.account_id in locks and t.transaction_date <= locks[l.account_id] for l in t.lines)}
     return render_template("transactions/index.html", transactions=transactions, filters=filters,
                            is_filtered=any(filters[key] for key in ("q", "date", "min", "max", "status")),
-                           account_map={a.id: a for a in accounts}, pagination=pagination,
+                           account_map={a.id: a for a in accounts}, pagination=pagination, locked_ids=locked_ids,
                            export_start=export_end - timedelta(days=365), export_end=export_end)
 
 
@@ -1206,9 +1292,14 @@ def blank_quick_row():
             "amount": "", "error": None}
 
 
-def parse_quick_rows(form, accounts):
-    """Validate the quick-entry rows. Returns (rows echoed to the template, parsed rows to persist)."""
+def parse_quick_rows(form, accounts, locks=None):
+    """Validate the quick-entry rows. Returns (rows echoed to the template, parsed rows to persist).
+
+    ``locks`` (account id -> confirmed date) is given only when the rows will be posted directly.
+    """
     account_ids = {account.id for account in accounts}
+    by_id = {account.id: account for account in accounts}
+    locks = locks or {}
     values = {name: form.getlist(name) for name in QUICK_ROW_FIELDS}
     count = max((len(items) for items in values.values()), default=0)
     rows, parsed = [], []
@@ -1242,6 +1333,10 @@ def parse_quick_rows(form, accounts):
         if debit == credit:
             row["error"] = "Χρέωση και πίστωση δεν μπορεί να είναι ο ίδιος λογαριασμός."
             continue
+        locked = [(by_id[a], locks[a]) for a in (debit, credit) if a in locks and when <= locks[a]]
+        if locked:
+            row["error"] = lock_message(*locked[0], when)
+            continue
         try:
             amount = Decimal(row["amount"].replace(",", "."))
         except InvalidOperation:
@@ -1263,7 +1358,8 @@ def transactions_quick():
         return render_template("transactions/quick.html", accounts=accounts,
                                rows=[blank_quick_row() for _ in range(QUICK_ROWS_DEFAULT)])
     mode = "post" if "post" in request.form.getlist("mode") else "draft"
-    rows, parsed = parse_quick_rows(request.form, accounts)
+    locks = balance_locks.lock_dates(get_db(), g.company.id) if mode == "post" else None
+    rows, parsed = parse_quick_rows(request.form, accounts, locks)
     if any(row["error"] for row in rows):
         flash("Διορθώστε τις γραμμές με σφάλμα. Δεν αποθηκεύτηκε καμία εγγραφή.", "error")
         return render_template("transactions/quick.html", accounts=accounts, rows=rows), 422
@@ -1364,12 +1460,28 @@ def transaction_preview(transaction_id):
     )
 
 
+def lock_message(account, locked_until, when) -> str:
+    return (f"Ο λογαριασμός {account.code} · {account.name} έχει επιβεβαιωμένο υπόλοιπο έως "
+            f"{locked_until.strftime('%d/%m/%Y')}· η εγγραφή της {when.strftime('%d/%m/%Y')} "
+            "δεν μπορεί να το αλλάξει.")
+
+
+def refuse_if_locked(transaction) -> bool:
+    """Flash and return True when posting/unposting would alter a confirmed balance."""
+    blocked = balance_locks.blocking_lines(get_db(), transaction)
+    for account, locked_until in blocked:
+        flash(lock_message(account, locked_until, transaction.transaction_date), "error")
+    return bool(blocked)
+
+
 @web.post("/transactions/<int:transaction_id>/post")
 @company_required
 def transaction_post(transaction_id):
     transaction = get_db().exec(transaction_query(transaction_id)).first()
     if not transaction or transaction.is_posted:
         abort(404 if not transaction else 400)
+    if refuse_if_locked(transaction):
+        return finish_list()
     transaction.is_posted = True
     get_db().add(transaction)
     get_db().commit()
@@ -1383,6 +1495,8 @@ def transaction_unpost(transaction_id):
     transaction = get_db().exec(transaction_query(transaction_id)).first()
     if not transaction or not transaction.is_posted:
         abort(404 if not transaction else 400)
+    if refuse_if_locked(transaction):
+        return finish_list()
     transaction.is_posted = False
     get_db().add(transaction)
     get_db().commit()

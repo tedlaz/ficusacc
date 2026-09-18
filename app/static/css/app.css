@@ -593,6 +593,13 @@ input:user-invalid { border-color: var(--red); box-shadow: 0 0 0 4px #a6403622; 
 a.page-number:hover { border-color: var(--accent); color: var(--accent); }
 .page-number.current { border-color: var(--accent); color: #fff; background: var(--accent); }
 .page-gap { padding: 0 4px; color: var(--muted); letter-spacing: 2px; }
+.lock-mark { display: inline-grid; place-items: center; width: 18px; height: 18px; margin-left: 6px; vertical-align: middle; color: var(--muted); }
+.lock-mark .ui-icon { width: 13px; height: 13px; }
+.lock-badge { display: inline-flex; align-items: center; gap: 5px; margin-top: 4px; color: var(--muted); font-size: .78rem; }
+.lock-badge .ui-icon { width: 13px; height: 13px; }
+.ledger-locked td { opacity: .82; }
+.icon-action[disabled] { opacity: .45; cursor: not-allowed; pointer-events: auto; transform: none; box-shadow: none; }
+.icon-action[disabled]:hover { color: var(--accent); background: #fffefb; border-color: var(--line); }
 .settings-form { display: grid; gap: 18px; }
 .setting-row { display: grid; gap: 6px; padding: 14px 0; border-top: 1px solid var(--line); }
 .setting-row:first-child { border-top: 0; padding-top: 0; }

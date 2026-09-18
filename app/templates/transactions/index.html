@@ -45,13 +45,13 @@
           <a class="icon-action" href="{{ url_for('web.transaction_copy', transaction_id=item.id) }}" data-modal-url="{{ url_for('web.transaction_copy', transaction_id=item.id, next=here) }}" data-tooltip="Αντιγραφή" aria-label="Αντιγραφή">{{ icon('copy') }}</a>
           <form method="post" action="{{ url_for('web.transaction_unpost', transaction_id=item.id) }}" data-transaction-action data-confirm="Μετατροπή σε πρόχειρη εγγραφή;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path.rstrip('?') }}">
-            <button class="icon-action" data-tooltip="Αναίρεση οριστικοποίησης" aria-label="Αναίρεση οριστικοποίησης">{{ icon('undo') }}</button>
+            {% if item.id in locked_ids %}<button class="icon-action" type="button" disabled data-tooltip="Κλειδωμένη: επιβεβαιωμένο υπόλοιπο λογαριασμού" aria-label="Κλειδωμένη: επιβεβαιωμένο υπόλοιπο λογαριασμού">{{ icon('lock') }}</button>{% else %}<button class="icon-action" data-tooltip="Αναίρεση οριστικοποίησης" aria-label="Αναίρεση οριστικοποίησης">{{ icon('undo') }}</button>{% endif %}
           </form>
         {% else %}
           <a class="icon-action" href="{{ url_for('web.transaction_edit', transaction_id=item.id) }}" data-modal-url="{{ url_for('web.transaction_edit', transaction_id=item.id, next=here) }}" data-tooltip="Επεξεργασία" aria-label="Επεξεργασία">{{ icon('edit') }}</a>
           <form method="post" action="{{ url_for('web.transaction_post', transaction_id=item.id) }}" data-transaction-action data-confirm="Οριστικοποίηση εγγραφής;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path.rstrip('?') }}">
-            <button class="icon-action" data-tooltip="Οριστικοποίηση" aria-label="Οριστικοποίηση">{{ icon('check') }}</button>
+            {% if item.id in locked_ids %}<button class="icon-action" type="button" disabled data-tooltip="Κλειδωμένη: επιβεβαιωμένο υπόλοιπο λογαριασμού" aria-label="Κλειδωμένη: επιβεβαιωμένο υπόλοιπο λογαριασμού">{{ icon('lock') }}</button>{% else %}<button class="icon-action" data-tooltip="Οριστικοποίηση" aria-label="Οριστικοποίηση">{{ icon('check') }}</button>{% endif %}
           </form>
           <form method="post" action="{{ url_for('web.transaction_delete', transaction_id=item.id) }}" data-transaction-action data-confirm="Οριστική διαγραφή εγγραφής;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path.rstrip('?') }}">

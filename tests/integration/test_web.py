@@ -10,6 +10,7 @@ from sqlmodel import Session, select
 
 from app.infrastructure.database.models import (
     AccountModel,
+    BalanceConfirmationModel,
     TransactionLineModel,
     TransactionModel,
     UserModel,
@@ -1199,3 +1200,142 @@ def test_settings_page_gates_inactive_accounts_in_entry_forms(client, logged_in,
     # Switched back off: the old account disappears from the forms again.
     client.post("/settings", data={"csrf_token": csrf}, follow_redirects=True)
     assert "Παλιό ταμείο" not in client.get("/transactions/new").text
+
+
+def test_balance_confirmation_locks_earlier_movements(client, logged_in, app, csrf):
+    user_id, company_id = logged_in
+    with Session(app.extensions["sqlmodel_engine"]) as db:
+        cash = AccountModel(company_id=company_id, code="38.00", name="Ταμείο", account_type="asset")
+        expense = AccountModel(company_id=company_id, code="64.00", name="Έξοδα", account_type="expense")
+        db.add(cash)
+        db.add(expense)
+        db.commit()
+        cash_id, expense_id = cash.id, expense.id
+
+    def new_transaction(when, amount, description):
+        client.post("/transactions/new", data={
+            "csrf_token": csrf, "transaction_date": when, "description": description,
+            "account_id": [str(cash_id), str(expense_id)], "amount": [amount, f"-{amount}"],
+            "line_description": ["", ""]})
+        with Session(app.extensions["sqlmodel_engine"]) as db:
+            return db.exec(select(TransactionModel).where(TransactionModel.description == description)).one().id
+
+    def is_posted(transaction_id):
+        with Session(app.extensions["sqlmodel_engine"]) as db:
+            return db.get(TransactionModel, transaction_id).is_posted
+
+    posted_id = new_transaction("15/01/2026", "100", "Posted January")
+    client.post(f"/transactions/{posted_id}/post", data={"csrf_token": csrf})
+    draft_id = new_transaction("10/01/2026", "40", "Draft January")
+    assert is_posted(posted_id) and not is_posted(draft_id)
+
+    ledger = client.get(f"/accounts/{cash_id}/ledger")
+    assert 'data-open="confirm-balance-dialog"' in ledger.text
+    assert "data-locked-until" not in ledger.text
+    # The dialog starts from the last posted movement and the ledger balance.
+    assert 'name="as_of_date" class="greek-date-input" data-greek-date inputmode="numeric" pattern="[0-9]{2}/[0-9]{2}/[0-9]{4}" maxlength="10" placeholder="ηη/μμ/εεεε" required value="15/01/2026"' in ledger.text
+    assert 'name="balance" required placeholder="0,00" autocomplete="off" value="100.00"' in ledger.text
+
+    # Wrong figure: refused with the difference, nothing locked.
+    wrong = client.post(f"/accounts/{cash_id}/confirm-balance",
+                        data={"csrf_token": csrf, "as_of_date": "31/01/2026", "balance": "90"},
+                        follow_redirects=True)
+    assert "Υπολογισμένο υπόλοιπο 100,00 €, δηλωμένο 90,00 € (διαφορά -10,00 €)" in wrong.text
+    assert "data-locked-until" not in wrong.text
+
+    right = client.post(f"/accounts/{cash_id}/confirm-balance",
+                        data={"csrf_token": csrf, "as_of_date": "31/01/2026", "balance": "100"},
+                        follow_redirects=True)
+    assert "επιβεβαιώθηκε έως 31/01/2026" in right.text
+    assert "Επιβεβαιωμένο έως 31/01/2026" in right.text
+    assert 'class="ledger-locked"' in right.text
+    assert "data-confirmation-row" in right.text
+    assert "Επιβεβαιωμένο υπόλοιπο έως 31/01/2026" in client.get("/accounts").text
+
+    # Posting the earlier draft and unposting the confirmed movement are both refused.
+    refused = client.post(f"/transactions/{draft_id}/post", data={"csrf_token": csrf}, follow_redirects=True)
+    assert "έχει επιβεβαιωμένο υπόλοιπο έως 31/01/2026" in refused.text
+    assert not is_posted(draft_id)
+    client.post(f"/transactions/{posted_id}/unpost", data={"csrf_token": csrf})
+    assert is_posted(posted_id)
+    listing = client.get("/transactions")
+    assert listing.text.count('disabled data-tooltip="Κλειδωμένη') == 2
+
+    # Later movements are unaffected.
+    later_id = new_transaction("05/02/2026", "5", "February")
+    client.post(f"/transactions/{later_id}/post", data={"csrf_token": csrf})
+    assert is_posted(later_id)
+
+    # Quick entry: posting into the locked window is a row error, saving as draft is fine.
+    quick = {"csrf_token": csrf, "row_date": ["20/01/2026"], "row_description": ["Quick"],
+             "row_debit": [str(cash_id)], "row_credit": [str(expense_id)], "row_amount": ["1"]}
+    blocked = client.post("/transactions/quick", data={**quick, "mode": "post"})
+    assert blocked.status_code == 422
+    assert "έχει επιβεβαιωμένο υπόλοιπο έως 31/01/2026" in blocked.text
+    assert client.post("/transactions/quick", data=quick).status_code in (200, 302)
+    with Session(app.extensions["sqlmodel_engine"]) as db:
+        quick_row = db.exec(select(TransactionModel).where(TransactionModel.description == "Quick")).one()
+        assert quick_row.is_posted is False
+        confirmation_id = db.exec(select(BalanceConfirmationModel)).one().id
+
+    # A superuser removes the confirmation and the January draft can be posted again.
+    with Session(app.extensions["sqlmodel_engine"]) as db:
+        user = db.get(UserModel, user_id)
+        user.is_superuser = False
+        db.add(user)
+        db.commit()
+    assert client.post(f"/accounts/{cash_id}/confirm-balance/{confirmation_id}/delete",
+                       data={"csrf_token": csrf}).status_code == 403
+    with Session(app.extensions["sqlmodel_engine"]) as db:
+        user = db.get(UserModel, user_id)
+        user.is_superuser = True
+        db.add(user)
+        db.commit()
+    unlocked = client.post(f"/accounts/{cash_id}/confirm-balance/{confirmation_id}/delete",
+                           data={"csrf_token": csrf}, follow_redirects=True)
+    assert "ξεκλειδώθηκε" in unlocked.text
+    client.post(f"/transactions/{draft_id}/post", data={"csrf_token": csrf})
+    assert is_posted(draft_id)
+
+
+def test_accounts_list_filters_and_edits_return_to_the_same_view(client, logged_in, app, csrf):
+    user_id, company_id = logged_in
+    with Session(app.extensions["sqlmodel_engine"]) as db:
+        for index in range(30):
+            db.add(AccountModel(company_id=company_id, code=f"64.{index:02d}", name=f"Έξοδο {index}",
+                                account_type="expense", is_active=index % 3 != 0))
+        db.add(AccountModel(company_id=company_id, code="38.00", name="Ταμείο", account_type="asset"))
+        db.commit()
+
+    by_type = client.get("/accounts?type=asset")
+    assert by_type.text.count("data-account-row") == 1 and "Ταμείο" in by_type.text
+    by_code = client.get("/accounts?code=64.1")
+    assert by_code.text.count("data-account-row") == 10
+    inactive = client.get("/accounts?status=inactive")
+    assert inactive.text.count("data-account-row") == 10
+    assert "Ανενεργός" in inactive.text and "Ενεργός<" not in inactive.text
+    assert client.get("/accounts?type=expense&status=active").text.count("data-account-row") == 20
+    combined = client.get("/accounts?type=expense&page=2")
+    assert combined.text.count("data-account-row") == 5
+    assert 'aria-current="page">2</span>' in combined.text
+    assert 'href="?type=expense&amp;page=1"' in combined.text  # pager keeps the filters
+    assert "Καθαρισμός φίλτρων" in combined.text
+    # Row actions carry the current view so the edit lands back on it.
+    assert "edit?next=/accounts?type%3Dexpense%26page%3D2" in combined.text
+
+    with Session(app.extensions["sqlmodel_engine"]) as db:
+        target = db.exec(select(AccountModel).where(AccountModel.code == "64.29")).one()
+        target_id = target.id
+    form = client.get(f"/accounts/{target_id}/edit?next=/accounts%3Ftype%3Dexpense%26page%3D2",
+                      headers={"HX-Request": "true"})
+    assert 'name="next" value="/accounts?type=expense&amp;page=2"' in form.text
+    saved = client.post(f"/accounts/{target_id}/edit", data={
+        "csrf_token": csrf, "editing": "1", "code": "64.29", "name": "Έξοδο 29 διορθωμένο",
+        "account_type": "expense", "is_active": "on",
+        "next": "/accounts?type=expense&page=2"}, headers={"HX-Request": "true"})
+    assert saved.headers["HX-Redirect"] == "/accounts?type=expense&page=2"
+    # A foreign `next` is ignored.
+    saved = client.post(f"/accounts/{target_id}/edit", data={
+        "csrf_token": csrf, "editing": "1", "code": "64.29", "name": "Έξοδο 29", "account_type": "expense",
+        "is_active": "on", "next": "https://evil.example/"}, headers={"HX-Request": "true"})
+    assert saved.headers["HX-Redirect"] == "/accounts"
