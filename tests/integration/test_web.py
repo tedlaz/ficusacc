@@ -387,13 +387,15 @@ def test_accounts_transactions_and_journal_are_paginated(
     second_accounts = client.get("/accounts?page=2")
     assert first_accounts.text.count("data-account-row") == 25
     assert second_accounts.text.count("data-account-row") == 5
-    assert "Σελίδα <strong>1</strong> από <strong>2</strong>" in first_accounts.text
+    assert 'aria-current="page">1</span>' in first_accounts.text
+    assert 'href="?page=2"' in first_accounts.text
 
     first_transactions = client.get("/transactions")
     second_transactions = client.get("/transactions?page=2")
     assert first_transactions.text.count("data-transaction-row") == 25
     assert second_transactions.text.count("data-transaction-row") == 5
-    assert "Σελίδα <strong>2</strong> από <strong>2</strong>" in second_transactions.text
+    assert 'aria-current="page">2</span>' in second_transactions.text
+    assert 'href="?page=1"' in second_transactions.text
 
     journal_url = (
         "/reports/result?report_type=journal&start_date=01/01/2026&end_date=31/01/2026"
@@ -405,7 +407,8 @@ def test_accounts_transactions_and_journal_are_paginated(
     assert second_journal.text.count("data-journal-article") == 5
     assert first_journal.text.index("Transaction 29") < first_journal.text.index("Transaction 28")
     assert second_journal.text.index("Transaction 4") < second_journal.text.index("Transaction 3")
-    assert "Σελίδα <strong>1</strong> από <strong>2</strong>" in first_journal.text
+    assert 'aria-current="page">1</span>' in first_journal.text
+    assert 'hx-get="/reports/result?report_type=journal&amp;start_date=01/01/2026&amp;end_date=31/01/2026&amp;page=2"' in first_journal.text
 
     captured = {}
 

@@ -22,10 +22,6 @@
     </tbody>
   </table></div>
 </article>
-{% if pagination.pages > 1 %}
-<nav class="pagination" aria-label="Σελιδοποίηση καρτέλας">
-  <a class="page-arrow {{ 'disabled' if pagination.page == 1 }}" href="{{ url_for('web.report_result', report_type='general_ledger', account_id=account.id, page=pagination.page - 1) }}" hx-get="{{ url_for('web.report_result', report_type='general_ledger', account_id=account.id, page=pagination.page - 1) }}" hx-target="#report-result" hx-push-url="false" aria-label="Προηγούμενη σελίδα">{{ icon('chevron-left') }}</a>
-  <span>Σελίδα <strong>{{ pagination.page }}</strong> από <strong>{{ pagination.pages }}</strong></span>
-  <a class="page-arrow {{ 'disabled' if pagination.page == pagination.pages }}" href="{{ url_for('web.report_result', report_type='general_ledger', account_id=account.id, page=pagination.page + 1) }}" hx-get="{{ url_for('web.report_result', report_type='general_ledger', account_id=account.id, page=pagination.page + 1) }}" hx-target="#report-result" hx-push-url="false" aria-label="Επόμενη σελίδα">{{ icon('chevron-right') }}</a>
-</nav>
-{% endif %}
+{% from 'macros/pagination.html' import pager with context %}
+{% macro page_url(number) %}{{ url_for('web.report_result', report_type='general_ledger', account_id=account.id, page=number) }}{% endmacro %}
+{{ pager(pagination, page_url, hx_target='#report-result', label='Σελιδοποίηση καρτέλας') }}

@@ -1,0 +1,18 @@
+{% from 'macros/icons.html' import icon %}
+{# Page navigation with numbered links. `page_url(n)` is a caller-supplied macro; `hx_target` adds htmx swapping. #}
+{% macro pager(pagination, page_url, hx_target=none, label='Σελιδοποίηση') %}
+{% if pagination.pages > 1 %}
+<nav class="pagination" aria-label="{{ label }}">
+  <a class="page-arrow {{ 'disabled' if pagination.page == 1 }}" href="{{ page_url(pagination.page - 1) }}"{% if hx_target %} hx-get="{{ page_url(pagination.page - 1) }}" hx-target="{{ hx_target }}" hx-push-url="false"{% endif %} aria-label="Προηγούμενη σελίδα">{{ icon('chevron-left') }}</a>
+  <ol class="page-list">
+    {% for number in page_window(pagination.page, pagination.pages) %}
+    {% if number is none %}<li class="page-gap" aria-hidden="true">…</li>
+    {% elif number == pagination.page %}<li><span class="page-number current" aria-current="page">{{ number }}</span></li>
+    {% else %}<li><a class="page-number" href="{{ page_url(number) }}"{% if hx_target %} hx-get="{{ page_url(number) }}" hx-target="{{ hx_target }}" hx-push-url="false"{% endif %} aria-label="Σελίδα {{ number }}">{{ number }}</a></li>
+    {% endif %}
+    {% endfor %}
+  </ol>
+  <a class="page-arrow {{ 'disabled' if pagination.page == pagination.pages }}" href="{{ page_url(pagination.page + 1) }}"{% if hx_target %} hx-get="{{ page_url(pagination.page + 1) }}" hx-target="{{ hx_target }}" hx-push-url="false"{% endif %} aria-label="Επόμενη σελίδα">{{ icon('chevron-right') }}</a>
+</nav>
+{% endif %}
+{% endmacro %}

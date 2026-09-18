@@ -139,7 +139,7 @@
     <div class="compact-list cash-list">
       {% for item in cash_accounts %}
       <div><a class="code account-link" href="{{ url_for('web.account_ledger', account_id=item.account.id) }}">{{ item.account.code }}</a><a class="account-link" href="{{ url_for('web.account_ledger', account_id=item.account.id) }}"><strong>{{ item.account.name }}</strong></a><strong class="amount">{{ item.balance|money }}</strong></div>
-      {% else %}<p class="muted">Δεν υπάρχουν λογαριασμοί που ξεκινούν από 38.</p>{% endfor %}
+      {% else %}<p class="muted">Δεν υπάρχουν λογαριασμοί 38* με υπόλοιπο.</p>{% endfor %}
       <div class="cash-total-row"><span class="total-mark">{{ icon('wallet') }}</span><strong>Σύνολο</strong><strong class="amount" data-countup>{{ cash_total|money }}</strong></div>
     </div>
   </article>

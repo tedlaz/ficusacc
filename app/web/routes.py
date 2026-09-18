@@ -194,11 +194,25 @@ def query_with(**changes):
     return urlencode(values)
 
 
+def page_window(page: int, pages: int, around: int = 2) -> list[int | None]:
+    """Page numbers to show: first, last, and ``around`` on each side of the current; None = gap."""
+    wanted = {1, pages} | {n for n in range(page - around, page + around + 1) if 1 <= n <= pages}
+    window: list[int | None] = []
+    for number in sorted(wanted):
+        if window and number - window[-1] == 2:
+            window.append(number - 1)  # a gap of one page is just that page
+        elif window and number - window[-1] > 2:
+            window.append(None)
+        window.append(number)
+    return window
+
+
 @web.app_context_processor
 def shared_template_context():
     companies = companies_for_user(g.user.id) if getattr(g, "user", None) else []
     return {
         "companies": companies,
+        "page_window": page_window,
         "account_types": ACCOUNT_TYPES,
         "roles": ROLES,
         "today": date.today(),
@@ -453,8 +467,9 @@ def dashboard():
         ).all()
     )
     balances = reports.account_balances(db, g.company.id, date.today())
+    # Only accounts that actually hold something: the imported history left many zeroed ones.
     cash_accounts = sorted(
-        [item for item in balances.values() if item.account.code.startswith("38")],
+        [item for item in balances.values() if item.account.code.startswith("38") and item.balance],
         key=lambda item: item.account.code,
     )
     cash_total = sum((item.balance for item in cash_accounts), Decimal("0"))

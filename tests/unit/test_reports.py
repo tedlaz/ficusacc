@@ -96,3 +96,14 @@ def test_money_streams_merges_tail_and_balances_columns(app, seeded):
     assert len(chart["links"]) == len(chart["sources"]) + len(chart["targets"])
     assert all(link["path"].startswith("M ") and link["path"].endswith(" Z") for link in chart["links"])
     assert abs(chart["band"]["h"] - right) < 0.1
+
+
+def test_page_window_keeps_ends_and_neighbours():
+    from app.web.routes import page_window
+
+    assert page_window(1, 1) == [1]
+    assert page_window(1, 5) == [1, 2, 3, 4, 5]
+    assert page_window(1, 20) == [1, 2, 3, None, 20]
+    assert page_window(10, 20) == [1, None, 8, 9, 10, 11, 12, None, 20]
+    assert page_window(4, 20) == [1, 2, 3, 4, 5, 6, None, 20]  # a one-page gap is shown as the page
+    assert page_window(20, 20) == [1, None, 18, 19, 20]

@@ -1,8 +1,3 @@
-{% from 'macros/icons.html' import icon %}
-{% if pagination.pages > 1 %}
-<nav class="pagination" aria-label="Σελιδοποίηση">
-  <a class="page-arrow {{ 'disabled' if pagination.page == 1 }}" href="?{{ query_with(page=pagination.page - 1) }}" aria-label="Προηγούμενη σελίδα">{{ icon('chevron-left') }}</a>
-  <span>Σελίδα <strong>{{ pagination.page }}</strong> από <strong>{{ pagination.pages }}</strong></span>
-  <a class="page-arrow {{ 'disabled' if pagination.page == pagination.pages }}" href="?{{ query_with(page=pagination.page + 1) }}" aria-label="Επόμενη σελίδα">{{ icon('chevron-right') }}</a>
-</nav>
-{% endif %}
+{% from 'macros/pagination.html' import pager with context %}
+{% macro page_url(number) %}?{{ query_with(page=number) }}{% endmacro %}
+{{ pager(pagination, page_url) }}
