@@ -1,12 +1,15 @@
-<article class="panel report-output" data-pdf-title="Ισοζύγιο έως {{ report.as_of_date|dategr }}" data-pdf-file="trial-balance-{{ report.as_of_date }}.pdf">
-  <header><div><p class="eyebrow">Έως {{ report.as_of_date|dategr }}</p><h2>Ισοζύγιο</h2></div></header>
+{% from 'macros/icons.html' import icon %}
+<article class="panel report-output" data-pdf-title="Ισοζύγιο έως {{ report.as_of_date|dategr }}" data-pdf-file="trial-balance-{{ report.as_of_date }}.pdf" data-trial-tree>
+  <header><div><p class="eyebrow">Έως {{ report.as_of_date|dategr }}</p><h2>Ισοζύγιο</h2></div><div class="head-actions"><button type="button" class="icon-action" data-trial-expand-all data-tooltip="Άνοιγμα όλων" aria-label="Άνοιγμα όλων">{{ icon('plus') }}</button><button type="button" class="icon-action" data-trial-collapse-all data-tooltip="Κλείσιμο όλων" aria-label="Κλείσιμο όλων">{{ icon('minus') }}</button></div></header>
   <div class="table-wrap"><table>
     <thead><tr><th>Κωδικός</th><th>Λογαριασμός</th><th>Τύπος</th><th class="numeric">Χρέωση</th><th class="numeric">Πίστωση</th><th class="numeric">Υπόλοιπο</th></tr></thead>
     <tbody>
     {% for item in report.accounts %}
-      <tr class="{{ 'trial-summary-row' if item.is_summary else 'trial-detail-row' }}" data-trial-code="{{ item.account.code }}">
+      {% set parent = item.account.code.rsplit('.', 1)[0] if '.' in item.account.code else '' %}
+      {# Every level starts folded: only top-level rows are visible until the user opens them. #}
+      <tr class="{{ 'trial-summary-row' if item.is_summary else 'trial-detail-row' }}" data-trial-code="{{ item.account.code }}" data-trial-parent="{{ parent }}"{% if item.is_summary %} aria-expanded="false"{% endif %}{% if parent %} hidden{% endif %}>
         <td><span class="code">{{ item.account.code }}</span></td>
-        <td><div class="trial-account-name {{ 'nested' if item.level }}" style="--account-level: {{ item.level }}">{% if item.account.id and not item.is_summary %}<a class="account-link" href="{{ url_for('web.account_ledger', account_id=item.account.id) }}">{{ item.account.name }}</a>{% else %}<span>{{ item.account.name }}</span>{% endif %}</div></td>
+        <td><div class="trial-account-name {{ 'nested' if item.level }}" style="--account-level: {{ item.level }}">{% if item.is_summary %}<button type="button" class="trial-toggle" data-trial-toggle aria-label="Άνοιγμα/κλείσιμο {{ item.account.code }}">{{ icon('chevron-right') }}</button>{% endif %}{% if item.account.id and not item.is_summary %}<a class="account-link" href="{{ url_for('web.account_ledger', account_id=item.account.id) }}">{{ item.account.name }}</a>{% else %}<span>{{ item.account.name }}</span>{% endif %}</div></td>
         <td><span class="type-pill type-{{ item.account.account_type.value }}">{{ item.account.account_type|account_type_label }}</span></td>
         <td class="amount">{{ item.debit_total|money }}</td>
         <td class="amount">{{ item.credit_total|money }}</td>

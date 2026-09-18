@@ -15,6 +15,42 @@ document.addEventListener('click', async (event) => {
   await openModal(link.dataset.modalUrl)
 }, true)
 
+/* ---------- trial balance tree (fold / unfold account levels) ---------- */
+const trialRows = (tree) => [...tree.querySelectorAll('tr[data-trial-code]')]
+const trialChildren = (tree, code) => trialRows(tree).filter((row) => row.dataset.trialParent === code)
+
+function setTrialRow(tree, row, expanded) {
+  row.setAttribute('aria-expanded', expanded)
+  if (expanded) {
+    trialChildren(tree, row.dataset.trialCode).forEach((child) => { child.hidden = false })
+    return
+  }
+  // Closing a level hides everything below it and folds it again, so reopening shows only its own children.
+  const prefix = `${row.dataset.trialCode}.`
+  trialRows(tree).filter((other) => other.dataset.trialCode.startsWith(prefix)).forEach((other) => {
+    other.hidden = true
+    if (other.hasAttribute('aria-expanded')) other.setAttribute('aria-expanded', 'false')
+  })
+}
+
+document.addEventListener('click', (event) => {
+  const tree = event.target.closest('[data-trial-tree]')
+  if (!tree) return
+  const toggle = event.target.closest('[data-trial-toggle]')
+  if (toggle) {
+    const row = toggle.closest('tr')
+    setTrialRow(tree, row, row.getAttribute('aria-expanded') !== 'true')
+    return
+  }
+  const expandAll = event.target.closest('[data-trial-expand-all]')
+  const collapseAll = event.target.closest('[data-trial-collapse-all]')
+  if (!expandAll && !collapseAll) return
+  trialRows(tree).forEach((row) => {
+    row.hidden = Boolean(collapseAll && row.dataset.trialParent)
+    if (row.hasAttribute('aria-expanded')) row.setAttribute('aria-expanded', Boolean(expandAll))
+  })
+})
+
 /* ---------- transaction hover preview ---------- */
 document.addEventListener('mouseover', (event) => {
   const trigger = event.target.closest('[data-transaction-preview-url]')

@@ -404,6 +404,12 @@ th.numeric { text-align: right; }
 .trial-summary-row td { border-top-color: #c7cfc8; background: #f0f3ed; font-weight: 700; }
 .trial-summary-row .code { color: var(--ink); background: #dfe5dd; }
 .trial-detail-row .trial-account-name { position: relative; }
+.trial-summary-row .trial-account-name { display: flex; align-items: center; gap: 8px; }
+.trial-toggle { display: inline-grid; width: 24px; height: 24px; place-items: center; border: 1px solid var(--line); border-radius: 7px; padding: 0; color: var(--accent); background: var(--panel); cursor: pointer; transition: background var(--dur), color var(--dur), border-color var(--dur); }
+.trial-toggle:hover { border-color: var(--accent); color: #fff; background: var(--accent); }
+.trial-toggle .ui-icon { transition: transform .25s var(--ease); }
+tr[aria-expanded="true"] .trial-toggle .ui-icon { transform: rotate(90deg); }
+tr[data-trial-code][hidden] { display: none; }
 .trial-detail-row .trial-account-name.nested::before { position: absolute; left: calc((var(--account-level) * 18px) - 10px); color: #a8b2aa; content: '└'; }
 
 /* ---------- modal & dialogs ---------- */

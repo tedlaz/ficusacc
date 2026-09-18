@@ -640,12 +640,12 @@ def test_trial_balance_builds_dotted_account_summary_levels(client, logged_in, a
     assert positions == sorted(positions)
 
     summary_38 = re.search(
-        r'<tr class="trial-summary-row" data-trial-code="38">(.*?)</tr>',
+        r'<tr class="trial-summary-row" data-trial-code="38"[^>]*>(.*?)</tr>',
         response.text,
         re.DOTALL,
     ).group(1)
     summary_3800 = re.search(
-        r'<tr class="trial-summary-row" data-trial-code="38\.00">(.*?)</tr>',
+        r'<tr class="trial-summary-row" data-trial-code="38\.00"[^>]*>(.*?)</tr>',
         response.text,
         re.DOTALL,
     ).group(1)
@@ -653,6 +653,12 @@ def test_trial_balance_builds_dotted_account_summary_levels(client, logged_in, a
     assert summary_3800.count("150,00 €") == 2
     assert "Χρηματικά διαθέσιμα" in summary_38
     assert "Ταμείο και τράπεζες" in summary_3800
+    # Folded by default: top levels visible and closed, everything nested hidden until opened.
+    assert 'data-trial-code="38" data-trial-parent="" aria-expanded="false">' in response.text
+    assert 'data-trial-code="38.00" data-trial-parent="38" aria-expanded="false" hidden>' in response.text
+    assert 'data-trial-code="38.00.01" data-trial-parent="38.00" hidden>' in response.text
+    assert response.text.count("data-trial-toggle") == response.text.count('class="trial-summary-row"')
+    assert 'data-trial-expand-all' in response.text and 'data-trial-collapse-all' in response.text
     assert "Σύνολο 38" not in response.text
     assert f'href="/accounts/{cash_id}/ledger"' in response.text
     assert f'href="/accounts/{bank_id}/ledger"' in response.text
