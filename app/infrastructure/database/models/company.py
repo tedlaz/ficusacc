@@ -1,6 +1,6 @@
 """Company and UserCompanyAccess SQLModel database models."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from pydantic import ConfigDict
@@ -23,8 +23,8 @@ class CompanyModel(SQLModel, table=True):
     fiscal_year_start_month: int = Field(default=1, ge=1, le=12)
     currency: str = Field(default="EUR", max_length=3)
     is_active: bool = Field(default=True)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     # Relationships
     accounts: list["AccountModel"] = Relationship(back_populates="company")
@@ -44,7 +44,7 @@ class UserCompanyAccessModel(SQLModel, table=True):
     company_id: int = Field(foreign_key="companies.id", index=True)
     role: str = Field(default="viewer", max_length=20)  # Stored as string enum value
     is_default: bool = Field(default=False)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     # Relationships
     user: "UserModel" = Relationship(back_populates="company_access")

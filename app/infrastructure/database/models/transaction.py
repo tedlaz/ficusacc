@@ -1,6 +1,6 @@
 """Transaction and TransactionLine SQLModel database models."""
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -25,8 +25,8 @@ class TransactionModel(SQLModel, table=True):
     reference: str | None = Field(default=None, max_length=100)
     is_posted: bool = Field(default=False, index=True)
     created_by_id: int = Field(foreign_key="users.id")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     # Relationships
     company: "CompanyModel" = Relationship(back_populates="transactions")

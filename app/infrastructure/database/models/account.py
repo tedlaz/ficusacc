@@ -1,6 +1,6 @@
 """Account SQLModel database model."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Optional
 
 import sqlalchemy as sa
@@ -34,8 +34,8 @@ class AccountModel(AccountBase, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     company_id: int = Field(foreign_key="companies.id", index=True)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     # Relationships
     company: "CompanyModel" = Relationship(back_populates="accounts")
