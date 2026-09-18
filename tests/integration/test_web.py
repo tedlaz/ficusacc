@@ -1307,33 +1307,39 @@ def test_accounts_list_filters_and_edits_return_to_the_same_view(client, logged_
         db.add(AccountModel(company_id=company_id, code="38.00", name="Ταμείο", account_type="asset"))
         db.commit()
 
+    # Active accounts are the default view; "all" lifts the status filter.
+    default = client.get("/accounts")
+    assert default.text.count("data-account-row") == 21 and "Ανενεργός" not in default.text
+    assert "Καθαρισμός φίλτρων" not in default.text
+    everything = client.get("/accounts?status=all")
+    assert everything.text.count("data-account-row") == 25 and "31 λογαριασμοί" in everything.text
     by_type = client.get("/accounts?type=asset")
     assert by_type.text.count("data-account-row") == 1 and "Ταμείο" in by_type.text
-    by_code = client.get("/accounts?code=64.1")
+    by_code = client.get("/accounts?code=64.1&status=all")
     assert by_code.text.count("data-account-row") == 10
     inactive = client.get("/accounts?status=inactive")
     assert inactive.text.count("data-account-row") == 10
     assert "Ανενεργός" in inactive.text and "Ενεργός<" not in inactive.text
-    assert client.get("/accounts?type=expense&status=active").text.count("data-account-row") == 20
-    combined = client.get("/accounts?type=expense&page=2")
+    assert client.get("/accounts?type=expense").text.count("data-account-row") == 20
+    combined = client.get("/accounts?type=expense&status=all&page=2")
     assert combined.text.count("data-account-row") == 5
     assert 'aria-current="page">2</span>' in combined.text
-    assert 'href="?type=expense&amp;page=1"' in combined.text  # pager keeps the filters
+    assert 'href="?type=expense&amp;status=all&amp;page=1"' in combined.text  # pager keeps the filters
     assert "Καθαρισμός φίλτρων" in combined.text
     # Row actions carry the current view so the edit lands back on it.
-    assert "edit?next=/accounts?type%3Dexpense%26page%3D2" in combined.text
+    assert "edit?next=/accounts?type%3Dexpense%26status%3Dall%26page%3D2" in combined.text
 
     with Session(app.extensions["sqlmodel_engine"]) as db:
         target = db.exec(select(AccountModel).where(AccountModel.code == "64.29")).one()
         target_id = target.id
-    form = client.get(f"/accounts/{target_id}/edit?next=/accounts%3Ftype%3Dexpense%26page%3D2",
+    form = client.get(f"/accounts/{target_id}/edit?next=/accounts%3Ftype%3Dexpense%26status%3Dall%26page%3D2",
                       headers={"HX-Request": "true"})
-    assert 'name="next" value="/accounts?type=expense&amp;page=2"' in form.text
+    assert 'name="next" value="/accounts?type=expense&amp;status=all&amp;page=2"' in form.text
     saved = client.post(f"/accounts/{target_id}/edit", data={
         "csrf_token": csrf, "editing": "1", "code": "64.29", "name": "Έξοδο 29 διορθωμένο",
         "account_type": "expense", "is_active": "on",
-        "next": "/accounts?type=expense&page=2"}, headers={"HX-Request": "true"})
-    assert saved.headers["HX-Redirect"] == "/accounts?type=expense&page=2"
+        "next": "/accounts?type=expense&status=all&page=2"}, headers={"HX-Request": "true"})
+    assert saved.headers["HX-Redirect"] == "/accounts?type=expense&status=all&page=2"
     # A foreign `next` is ignored.
     saved = client.post(f"/accounts/{target_id}/edit", data={
         "csrf_token": csrf, "editing": "1", "code": "64.29", "name": "Έξοδο 29", "account_type": "expense",

@@ -692,16 +692,17 @@ def change_password():
 
 
 # Accounts
-ACCOUNT_STATUSES = {"active", "inactive"}
+ACCOUNT_STATUSES = {"active", "inactive", "all"}
 
 
 def account_filters():
+    """The list shows active accounts unless asked otherwise (`status=all` lifts the filter)."""
     args = request.args
     raw_type = args.get("type", "")
     return {
         "code": args.get("code", "").strip(),
         "type": raw_type if raw_type in {kind.value for kind in AccountType} else "",
-        "status": args.get("status") if args.get("status") in ACCOUNT_STATUSES else "",
+        "status": args.get("status") if args.get("status") in ACCOUNT_STATUSES else "active",
     }
 
 
@@ -715,7 +716,7 @@ def accounts_index():
         conditions.append(col(AccountModel.code).startswith(filters["code"]))
     if filters["type"]:
         conditions.append(AccountModel.account_type == AccountType(filters["type"]))
-    if filters["status"]:
+    if filters["status"] != "all":
         conditions.append(AccountModel.is_active == (filters["status"] == "active"))
     total = db.exec(select(func.count()).select_from(AccountModel).where(*conditions)).one()
     page = max(request.args.get("page", 1, type=int) or 1, 1)
@@ -774,7 +775,7 @@ def accounts_index():
         pagination=pagination,
         lock_dates=balance_locks.lock_dates(db, g.company.id),
         filters=filters,
-        is_filtered=any(filters.values()),
+        is_filtered=bool(filters["code"] or filters["type"] or filters["status"] != "active"),
     )
 
 

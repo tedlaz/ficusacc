@@ -8,7 +8,7 @@
   <div class="filter-row">
     <label>Κωδικός<input type="search" name="code" value="{{ filters.code }}" placeholder="π.χ. 64.05" autocomplete="off"></label>
     <label>Τύπος<select name="type"><option value="">Όλοι</option>{% for type in account_types %}<option value="{{ type.value }}" {{ 'selected' if filters.type == type.value }}>{{ type.label }}</option>{% endfor %}</select></label>
-    <label>Κατάσταση<select name="status"><option value="">Όλες</option><option value="active" {{ 'selected' if filters.status == 'active' }}>Ενεργοί</option><option value="inactive" {{ 'selected' if filters.status == 'inactive' }}>Ανενεργοί</option></select></label>
+    <label>Κατάσταση<select name="status"><option value="active" {{ 'selected' if filters.status == 'active' }}>Ενεργοί</option><option value="inactive" {{ 'selected' if filters.status == 'inactive' }}>Ανενεργοί</option><option value="all" {{ 'selected' if filters.status == 'all' }}>Όλοι</option></select></label>
     <div class="filter-actions">
       <button class="icon-action icon-action-primary" data-tooltip="Εφαρμογή φίλτρων" aria-label="Εφαρμογή φίλτρων">{{ icon('search') }}</button>
       {% if is_filtered %}<a class="icon-action" href="{{ url_for('web.accounts_index') }}" data-tooltip="Καθαρισμός φίλτρων" aria-label="Καθαρισμός φίλτρων">{{ icon('close') }}</a>{% endif %}
