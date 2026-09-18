@@ -587,6 +587,10 @@ input:user-invalid { border-color: var(--red); box-shadow: 0 0 0 4px #a6403622; 
 a.page-number:hover { border-color: var(--accent); color: var(--accent); }
 .page-number.current { border-color: var(--accent); color: #fff; background: var(--accent); }
 .page-gap { padding: 0 4px; color: var(--muted); letter-spacing: 2px; }
+.settings-form { display: grid; gap: 18px; }
+.setting-row { display: grid; gap: 6px; padding: 14px 0; border-top: 1px solid var(--line); }
+.setting-row:first-child { border-top: 0; padding-top: 0; }
+.setting-row .hint { margin: 0 0 0 53px; }
 .backup-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 20px; }
 .action-tile { position: relative; display: flex; align-items: center; gap: 15px; border: 1px solid var(--line); border-radius: 12px; padding: 20px; text-align: left; background: var(--panel); cursor: pointer; transition: transform .3s var(--ease), box-shadow .3s; }
 .action-tile:hover { transform: translateY(-3px); box-shadow: var(--shadow-hover); }

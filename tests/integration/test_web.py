@@ -1150,3 +1150,46 @@ def test_editing_a_transaction_returns_to_the_filtered_list(client, csrf, logged
         "line_description": ["", ""],
     })
     assert response.headers["HX-Redirect"] == "/transactions"
+
+
+def test_settings_page_gates_inactive_accounts_in_entry_forms(client, logged_in, app, csrf):
+    user_id, company_id = logged_in
+    with Session(app.extensions["sqlmodel_engine"]) as db:
+        db.add(AccountModel(company_id=company_id, code="38.00", name="Παλιό ταμείο",
+                            account_type="asset", is_active=False))
+        db.add(AccountModel(company_id=company_id, code="64.00", name="Έξοδα",
+                            account_type="expense"))
+        db.commit()
+
+    # Default: inactive accounts are neither offered nor accepted.
+    assert "Παλιό ταμείο" not in client.get("/transactions/new").text
+    assert "Παλιό ταμείο" not in client.get("/transactions/quick").text
+    page = client.get("/settings")
+    assert page.status_code == 200
+    assert 'name="allow_inactive_accounts" ' in page.text and "checked" not in page.text.split(
+        'name="allow_inactive_accounts"')[1].split(">")[0]
+
+    saved = client.post("/settings", data={"csrf_token": csrf, "allow_inactive_accounts": "on"},
+                        follow_redirects=True)
+    assert saved.status_code == 200
+    assert "checked" in saved.text.split('name="allow_inactive_accounts"')[1].split(">")[0]
+    assert "38.00 · Παλιό ταμείο · ανενεργός" in client.get("/transactions/new").text
+    assert "38.00 · Παλιό ταμείο · ανενεργός" in client.get("/transactions/quick").text
+
+    with Session(app.extensions["sqlmodel_engine"]) as db:
+        old = db.exec(select(AccountModel).where(AccountModel.code == "38.00")).one()
+        expense = db.exec(select(AccountModel).where(AccountModel.code == "64.00")).one()
+        old_id, expense_id = old.id, expense.id
+    response = client.post("/transactions/new", data={
+        "csrf_token": csrf, "transaction_date": "01/01/2020", "description": "Παλιά διόρθωση",
+        "account_id": [str(expense_id), str(old_id)], "amount": ["10", "-10"],
+        "line_description": ["", ""], "mode": "post",
+    }, follow_redirects=True)
+    assert response.status_code == 200
+    with Session(app.extensions["sqlmodel_engine"]) as db:
+        stored = db.exec(select(TransactionModel).where(TransactionModel.description == "Παλιά διόρθωση")).one()
+        assert {line.account_id for line in stored.lines} == {old_id, expense_id}
+
+    # Switched back off: the old account disappears from the forms again.
+    client.post("/settings", data={"csrf_token": csrf}, follow_redirects=True)
+    assert "Παλιό ταμείο" not in client.get("/transactions/new").text

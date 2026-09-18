@@ -3,7 +3,7 @@
 {% block title %}Γρήγορη καταχώριση | HomeAccounting{% endblock %}
 {% block content %}
 {% macro account_select(name, selected, label) -%}
-<select name="{{ name }}" aria-label="{{ label }}"><option value="">Επιλέξτε</option>{% for account in accounts %}<option value="{{ account.id }}" {% if selected == account.id|string %}selected{% endif %}>{{ account.code }} · {{ account.name }}</option>{% endfor %}</select>
+<select name="{{ name }}" aria-label="{{ label }}"><option value="">Επιλέξτε</option>{% for account in accounts %}<option value="{{ account.id }}" {% if selected == account.id|string %}selected{% endif %}>{{ account.code }} · {{ account.name }}{% if not account.is_active %} · ανενεργός{% endif %}</option>{% endfor %}</select>
 {%- endmacro %}
 {% macro quick_row(row) -%}
 <div class="quick-row{% if row.error %} has-error{% endif %}" data-quick-row>

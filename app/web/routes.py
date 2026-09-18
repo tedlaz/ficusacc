@@ -44,7 +44,7 @@ from app.infrastructure.database.models import (
     UserCompanyAccessModel,
     UserModel,
 )
-from app.web import account_tree, journal_export, olap, reports
+from app.web import account_tree, journal_export, olap, reports, settings
 from app.web.auth import company_required, login_required, superuser_required
 from app.web.pdf_reports import build_report_pdf
 
@@ -1149,7 +1149,7 @@ def transactions_index():
 @web.route("/transactions/new", methods=["GET", "POST"])
 @company_required
 def transaction_new():
-    accounts = active_accounts()
+    accounts = entry_accounts()
     if request.method == "GET":
         return render_template("transactions/form.html", transaction=None, accounts=accounts,
                                form_lines=[{}, {}], copy=False)
@@ -1165,7 +1165,7 @@ def transaction_edit(transaction_id):
     if transaction.is_posted:
         flash("Οι οριστικοποιημένες εγγραφές δεν αλλάζουν.", "error")
         return finish("web.transactions_index")
-    accounts = active_accounts()
+    accounts = entry_accounts()
     if request.method == "GET":
         return render_template("transactions/form.html", transaction=transaction, accounts=accounts,
                                form_lines=transaction.lines, copy=False)
@@ -1178,7 +1178,7 @@ def transaction_copy(transaction_id):
     transaction = get_db().exec(transaction_query(transaction_id)).first()
     if not transaction:
         abort(404)
-    return render_template("transactions/form.html", transaction=transaction, accounts=active_accounts(),
+    return render_template("transactions/form.html", transaction=transaction, accounts=entry_accounts(),
                            form_lines=transaction.lines, copy=True)
 
 
@@ -1186,6 +1186,15 @@ def active_accounts():
     return list(get_db().exec(select(AccountModel).where(AccountModel.company_id == g.company.id,
                                                           AccountModel.is_active == True)  # noqa: E712
                               .order_by(AccountModel.code)).all())
+
+
+def entry_accounts():
+    """Accounts selectable in the entry forms: the active ones, or all when the setting allows it."""
+    db = get_db()
+    if not settings.get_setting(db, g.company.id, "allow_inactive_accounts"):
+        return active_accounts()
+    return list(db.exec(select(AccountModel).where(AccountModel.company_id == g.company.id)
+                        .order_by(AccountModel.code)).all())
 
 
 QUICK_ROWS_DEFAULT = 1
@@ -1249,7 +1258,7 @@ def parse_quick_rows(form, accounts):
 @web.route("/transactions/quick", methods=["GET", "POST"])
 @company_required
 def transactions_quick():
-    accounts = active_accounts()
+    accounts = entry_accounts()
     if request.method == "GET":
         return render_template("transactions/quick.html", accounts=accounts,
                                rows=[blank_quick_row() for _ in range(QUICK_ROWS_DEFAULT)])
@@ -1563,6 +1572,23 @@ def create_backup(path: Path):
     with sqlite3.connect(database_path()) as source, sqlite3.connect(path) as destination:
         source.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         source.backup(destination)
+
+
+# Settings
+@web.route("/settings", methods=["GET", "POST"])
+@company_required
+def settings_index():
+    db = get_db()
+    if request.method == "POST":
+        if not g.user.is_superuser:
+            abort(403)
+        for key in settings.SETTINGS:
+            settings.set_setting(db, g.company.id, key, key in request.form)
+        db.commit()
+        flash("Οι παράμετροι αποθηκεύτηκαν.", "success")
+        return finish("web.settings_index")
+    return render_template("settings/index.html", catalogue=settings.SETTINGS.values(),
+                           values=settings.company_settings(db, g.company.id))
 
 
 @web.get("/backup")

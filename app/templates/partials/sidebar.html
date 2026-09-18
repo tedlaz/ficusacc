@@ -26,6 +26,7 @@
     <a href="{{ url_for('web.reports_index') }}" data-nav="reports" class="{{ 'active' if request.endpoint and 'report' in request.endpoint }}">{{ icon('chart') }}<span>Αναφορές</span></a>
     <a href="{{ url_for('web.companies_index') }}" data-nav="companies" class="{{ 'active' if request.endpoint and 'compan' in request.endpoint }}">{{ icon('building') }}<span>Εταιρείες</span></a>
     <a href="{{ url_for('web.users_index') }}" data-nav="users" class="{{ 'active' if request.endpoint and 'user' in request.endpoint }}">{{ icon('users') }}<span>Χρήστες</span></a>
+    <a href="{{ url_for('web.settings_index') }}" data-nav="settings" class="{{ 'active' if request.endpoint == 'web.settings_index' }}">{{ icon('settings') }}<span>Παράμετροι</span></a>
     <a href="{{ url_for('web.backup_index') }}" data-nav="backup" class="{{ 'active' if request.endpoint and 'backup' in request.endpoint }}">{{ icon('database') }}<span>Αντίγραφα</span></a>
   </nav>
   <div class="sidebar-footer">
