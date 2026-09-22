@@ -1375,7 +1375,7 @@ def transactions_quick():
         return render_template("transactions/quick.html", accounts=accounts,
                                rows=[blank_quick_row() for _ in range(QUICK_ROWS_DEFAULT)])
     mode = "post" if "post" in request.form.getlist("mode") else "draft"
-    locks = balance_locks.lock_dates(get_db(), g.company.id) if mode == "post" else None
+    locks = balance_locks.lock_dates(get_db(), g.company.id)
     rows, parsed = parse_quick_rows(request.form, accounts, locks)
     if any(row["error"] for row in rows):
         flash("Διορθώστε τις γραμμές με σφάλμα. Δεν αποθηκεύτηκε καμία εγγραφή.", "error")
@@ -1400,15 +1400,26 @@ def transactions_quick():
     return finish("web.transactions_index")
 
 
+def submitted_lines():
+    """The posted lines echoed back to the form so an error does not wipe what the user typed."""
+    amounts = request.form.getlist("amount")
+    descriptions = request.form.getlist("line_description")
+    return [{"account_id": int(raw) if raw.isdigit() else None,
+             "amount": amounts[index] if index < len(amounts) else "",
+             "description": descriptions[index] if index < len(descriptions) else ""}
+            for index, raw in enumerate(request.form.getlist("account_id"))]
+
+
 def save_transaction(transaction, accounts):
     db = get_db()
+    copy = request.form.get("copy") == "1"
     account_ids = request.form.getlist("account_id")
     amounts = request.form.getlist("amount")
     descriptions = request.form.getlist("line_description")
     if len(account_ids) < 2:
         flash("Απαιτούνται τουλάχιστον 2 γραμμές.", "error")
         return render_template("transactions/form.html", transaction=transaction, accounts=accounts,
-                               form_lines=[], copy=False), 422
+                               form_lines=submitted_lines(), copy=copy), 422
     parsed = []
     try:
         for index, raw_account in enumerate(account_ids):
@@ -1420,13 +1431,21 @@ def save_transaction(transaction, accounts):
     except (ValueError, InvalidOperation, IndexError) as error:
         flash(f"Μη έγκυρη γραμμή εγγραφής: {error}", "error")
         return render_template("transactions/form.html", transaction=transaction, accounts=accounts,
-                               form_lines=[], copy=False), 422
+                               form_lines=submitted_lines(), copy=copy), 422
     total = sum((item[1] for item in parsed), Decimal("0"))
     if total != 0:
         flash(f"Η εγγραφή δεν ισοσκελίζεται. Διαφορά: {total}", "error")
         return render_template("transactions/form.html", transaction=transaction, accounts=accounts,
-                               form_lines=[], copy=False), 422
-    if transaction is None or request.form.get("copy") == "1":
+                               form_lines=submitted_lines(), copy=copy), 422
+    when = parse_date(request.form.get("transaction_date"))
+    locks = balance_locks.lock_dates(db, g.company.id)
+    by_id = {a.id: a for a in accounts}
+    blocked = [(by_id[i], locks[i]) for i, _, _ in parsed if i in locks and when <= locks[i]]
+    if blocked:
+        flash(lock_message(*blocked[0], when), "error")
+        return render_template("transactions/form.html", transaction=transaction, accounts=accounts,
+                               form_lines=submitted_lines(), copy=copy), 422
+    if transaction is None or copy:
         transaction = TransactionModel(company_id=g.company.id, created_by_id=g.user.id,
                                        transaction_date=date.today(), description="")
         db.add(transaction)
@@ -1434,7 +1453,7 @@ def save_transaction(transaction, accounts):
     else:
         transaction.lines.clear()
         db.flush()
-    transaction.transaction_date = parse_date(request.form.get("transaction_date"))
+    transaction.transaction_date = when
     transaction.description = request.form.get("description", "").strip()
     transaction.reference = request.form.get("reference", "").strip() or None
     transaction.updated_at = datetime.now(timezone.utc)

@@ -1267,16 +1267,28 @@ def test_balance_confirmation_locks_earlier_movements(client, logged_in, app, cs
     client.post(f"/transactions/{later_id}/post", data={"csrf_token": csrf})
     assert is_posted(later_id)
 
-    # Quick entry: posting into the locked window is a row error, saving as draft is fine.
+    # The full form refuses a new entry inside the locked window too.
+    form_blocked = client.post("/transactions/new", data={
+        "csrf_token": csrf, "transaction_date": "20/01/2026", "description": "Blocked",
+        "account_id": [str(cash_id), str(expense_id)], "amount": ["7", "-7"],
+        "line_description": ["", ""]})
+    assert form_blocked.status_code == 422
+    assert "έχει επιβεβαιωμένο υπόλοιπο έως 31/01/2026" in form_blocked.text
+    # the form comes back filled in, so the user can fix or cancel
+    assert 'value="20/01/2026"' in form_blocked.text
+    assert 'value="Blocked"' in form_blocked.text
+    assert 'value="7"' in form_blocked.text and 'value="-7"' in form_blocked.text
+    assert f'<option value="{cash_id}" selected>' in form_blocked.text
+
+    # Quick entry: creating into the locked window is a row error, draft or posted.
     quick = {"csrf_token": csrf, "row_date": ["20/01/2026"], "row_description": ["Quick"],
              "row_debit": [str(cash_id)], "row_credit": [str(expense_id)], "row_amount": ["1"]}
     blocked = client.post("/transactions/quick", data={**quick, "mode": "post"})
     assert blocked.status_code == 422
     assert "έχει επιβεβαιωμένο υπόλοιπο έως 31/01/2026" in blocked.text
-    assert client.post("/transactions/quick", data=quick).status_code in (200, 302)
+    assert client.post("/transactions/quick", data=quick).status_code == 422
     with Session(app.extensions["sqlmodel_engine"]) as db:
-        quick_row = db.exec(select(TransactionModel).where(TransactionModel.description == "Quick")).one()
-        assert quick_row.is_posted is False
+        assert not db.exec(select(TransactionModel).where(TransactionModel.description == "Quick")).all()
         confirmation_id = db.exec(select(BalanceConfirmationModel)).one().id
 
     # A superuser removes the confirmation and the January draft can be posted again.
