@@ -10,7 +10,7 @@ from sqlmodel import Session, func, select
 
 from app.domain.types import AccountType
 from app.infrastructure.database.models import AccountModel, TransactionModel
-from app.web.account_tree import prefix_names
+from app.web.account_tree import ancestors, prefix_names
 
 
 @dataclass
@@ -133,6 +133,22 @@ def monthly_flows(db: Session, company_id: int, as_of: date, months: int = 12) -
     ]
 
 
+def rollup(moved: list[AccountBalance], accounts) -> list[AccountBalance]:
+    """Roll every moved account up its parent chain; parents become summary rows. Sorted by code."""
+    by_id = {a.id: a for a in accounts}
+    shown = {x.account.id: x for x in moved}
+    for item in moved:
+        for parent in ancestors(item.account, by_id):
+            row = shown.setdefault(parent.id, AccountBalance(parent, is_summary=True))
+            row.is_summary = True
+            row.debit_total += item.debit_total
+            row.credit_total += item.credit_total
+            row.balance += item.balance
+    for row in shown.values():
+        row.level = len(ancestors(row.account, by_id))
+    return sorted(shown.values(), key=lambda x: x.account.code)
+
+
 def trial_balance(db: Session, company_id: int, as_of: date, include_summaries: bool = False):
     balances = account_balances(db, company_id, as_of)
     accounts = [item for item in balances.values() if item.balance]
@@ -199,17 +215,20 @@ def balance_sheet(db: Session, company_id: int, as_of: date):
     balances = account_balances(
         db, company_id, as_of, [AccountType.ASSET, AccountType.LIABILITY, AccountType.EQUITY]
     ).values()
-    assets = [item for item in balances if item.account.account_type == AccountType.ASSET]
-    liabilities = [item for item in balances if item.account.account_type == AccountType.LIABILITY]
-    equity = [item for item in balances if item.account.account_type == AccountType.EQUITY]
+    moved = [item for item in balances if item.balance]
+    rows = rollup(moved, [item.account for item in balances])
+
+    def of(kind, items):
+        return [item for item in items if item.account.account_type == kind]
+
     return {
         "as_of_date": as_of,
-        "assets": assets,
-        "liabilities": liabilities,
-        "equity": equity,
-        "total_assets": sum((item.balance for item in assets), Decimal("0")),
-        "total_liabilities": sum((abs(item.balance) for item in liabilities), Decimal("0")),
-        "total_equity": sum((abs(item.balance) for item in equity), Decimal("0")),
+        "assets": of(AccountType.ASSET, rows),
+        "liabilities": of(AccountType.LIABILITY, rows),
+        "equity": of(AccountType.EQUITY, rows),
+        "total_assets": sum((item.balance for item in of(AccountType.ASSET, moved)), Decimal("0")),
+        "total_liabilities": sum((abs(item.balance) for item in of(AccountType.LIABILITY, moved)), Decimal("0")),
+        "total_equity": sum((abs(item.balance) for item in of(AccountType.EQUITY, moved)), Decimal("0")),
     }
 
 
@@ -236,10 +255,12 @@ def income_statement(db: Session, company_id: int, start: date, end: date):
                 item.credit_total += abs(line.amount)
     for item in balances.values():
         item.balance = item.debit_total - item.credit_total
-    revenues = [x for x in balances.values() if x.account.account_type == AccountType.REVENUE]
-    expenses = [x for x in balances.values() if x.account.account_type == AccountType.EXPENSE]
-    revenue = sum((abs(x.balance) for x in revenues), Decimal("0"))
-    expense = sum((x.balance for x in expenses), Decimal("0"))
+    moved = [x for x in balances.values() if x.balance]
+    revenue = sum((abs(x.balance) for x in moved if x.account.account_type == AccountType.REVENUE), Decimal("0"))
+    expense = sum((x.balance for x in moved if x.account.account_type == AccountType.EXPENSE), Decimal("0"))
+    rows = rollup(moved, accounts)
+    revenues = [x for x in rows if x.account.account_type == AccountType.REVENUE]
+    expenses = [x for x in rows if x.account.account_type == AccountType.EXPENSE]
     return {"start_date": start, "end_date": end, "revenues": revenues, "expenses": expenses,
             "total_revenue": revenue, "total_expenses": expense, "net_income": revenue - expense}
 
@@ -258,7 +279,7 @@ class StreamNode:
 def _stream_nodes(items: list[AccountBalance], sign: int, kind: str, limit: int,
                   other_key: str, other_label: str) -> list[StreamNode]:
     amounts = sorted(
-        ((item.account, item.balance * sign) for item in items if item.balance * sign > 0),
+        ((item.account, item.balance * sign) for item in items if not item.is_summary and item.balance * sign > 0),
         key=lambda pair: pair[1], reverse=True,
     )
     nodes = [StreamNode(key=f"{kind}-{account.id}", label=account.name, amount=amount, kind=kind)

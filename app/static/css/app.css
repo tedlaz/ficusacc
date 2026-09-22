@@ -545,6 +545,8 @@ input:user-invalid { border-color: var(--red); box-shadow: 0 0 0 4px #a6403622; 
 .report-line, .report-total { display: flex; justify-content: space-between; gap: 20px; border-top: 1px solid var(--line); padding: 11px 0; transition: background var(--dur); }
 .report-line { margin-inline: -8px; padding-inline: 8px; border-radius: 6px; }
 .report-line:hover { background: #1f5c4808; }
+.report-line span { padding-left: calc(var(--account-level, 0) * 16px); }
+.report-summary { background: #f0f3ed; font-weight: 700; }
 .report-line span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .report-line strong, .report-total strong { white-space: nowrap; }
 .report-total { margin-top: 7px; border-top: 2px solid var(--accent); font-weight: 700; }

@@ -195,7 +195,8 @@ def add_account_section(pdf, title, items, total_label, total, company, absolute
     pdf.cell(0, 7, title)
     pdf.ln(7)
     rows = [
-        (item.account.code, item.account.name, money(abs(item.balance) if absolute else item.balance, company.currency))
+        {"summary": item.is_summary, "values": (
+            item.account.code, item.account.name, money(abs(item.balance) if absolute else item.balance, company.currency))}
         for item in items
     ]
     rows.append({"summary": True, "values": ("", total_label, money(total, company.currency))})
