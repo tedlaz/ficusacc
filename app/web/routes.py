@@ -765,15 +765,31 @@ def accounts_index():
         parent.id: parent
         for parent in db.exec(select(AccountModel).where(col(AccountModel.id).in_(parent_ids))).all()
     } if parent_ids else {}
+    lock_dates = balance_locks.lock_dates(db, g.company.id)
+    unlocked_counts = {}
+    if account_ids:
+        line_rows = db.exec(
+            select(TransactionLineModel.account_id, TransactionModel.transaction_date)
+            .join(TransactionModel, TransactionModel.id == TransactionLineModel.transaction_id)
+            .where(
+                TransactionModel.company_id == g.company.id,
+                TransactionModel.is_posted == True,  # noqa: E712
+                col(TransactionLineModel.account_id).in_(account_ids),
+            )
+        ).all()
+        for account_id, when in line_rows:
+            locked_until = lock_dates.get(account_id)
+            if locked_until is None or date.fromisoformat(str(when)) > locked_until:
+                unlocked_counts[account_id] = unlocked_counts.get(account_id, 0) + 1
     pagination = {"page": page, "pages": pages, "total": total}
     return render_template(
         "accounts/index.html",
         accounts=accounts,
         balances=balances,
         used_account_ids=used_account_ids,
+        unlocked_counts=unlocked_counts,
         parents=parents,
         pagination=pagination,
-        lock_dates=balance_locks.lock_dates(db, g.company.id),
         filters=filters,
         is_filtered=bool(filters["code"] or filters["type"] or filters["status"] != "active"),
     )

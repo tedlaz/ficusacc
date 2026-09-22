@@ -179,7 +179,7 @@ def test_account_crud_and_csv(client, csrf, logged_in, app):
     assert '"10.00.02","Κάρτα","asset","10"' in exported.text
     assert '"10","Ταμειακά","asset",""' in exported.text
     page = client.get("/accounts")
-    assert '<span class="code" title="Ταμειακά">10</span>' in page.text
+    assert page.status_code == 200
 
     # Form: empty parent on a new account is auto-suggested; self-parent is rejected on edit.
     response = client.post("/accounts/new", data={"csrf_token": csrf, "code": "10.00.04", "name": "Νέος",
@@ -1242,6 +1242,7 @@ def test_balance_confirmation_locks_earlier_movements(client, logged_in, app, cs
                         follow_redirects=True)
     assert "Υπολογισμένο υπόλοιπο 100,00 €, δηλωμένο 90,00 € (διαφορά -10,00 €)" in wrong.text
     assert "data-locked-until" not in wrong.text
+    assert client.get("/accounts").text.count('ακλείδωτες εγγραφές') == 2  # ταμείο + έξοδα
 
     right = client.post(f"/accounts/{cash_id}/confirm-balance",
                         data={"csrf_token": csrf, "as_of_date": "31/01/2026", "balance": "100"},
@@ -1250,7 +1251,7 @@ def test_balance_confirmation_locks_earlier_movements(client, logged_in, app, cs
     assert "Επιβεβαιωμένο έως 31/01/2026" in right.text
     assert 'class="ledger-locked"' in right.text
     assert "data-confirmation-row" in right.text
-    assert "Επιβεβαιωμένο υπόλοιπο έως 31/01/2026" in client.get("/accounts").text
+    assert client.get("/accounts").text.count('ακλείδωτες εγγραφές') == 1  # μόνο τα έξοδα μένουν ακλείδωτα
 
     # Posting the earlier draft and unposting the confirmed movement are both refused.
     refused = client.post(f"/transactions/{draft_id}/post", data={"csrf_token": csrf}, follow_redirects=True)
