@@ -1254,9 +1254,39 @@ def transactions_index():
 def transaction_new():
     accounts = entry_accounts()
     if request.method == "GET":
+        close_id = request.args.get("close", type=int)
+        if close_id:
+            return render_template("transactions/form.html", transaction=None, accounts=accounts,
+                                   form_lines=closing_lines(close_id, accounts), copy=False,
+                                   prefill_description="Κλείσιμο υπολοίπου")
         return render_template("transactions/form.html", transaction=None, accounts=accounts,
                                form_lines=[{}, {}], copy=False)
     return save_transaction(None, accounts)
+
+
+def closing_lines(account_id, accounts):
+    """Account with its balance reversed, against the last cash (38*) account it moved with, else the first one."""
+    db = get_db()
+    balance = db.exec(
+        select(func.coalesce(func.sum(TransactionLineModel.amount), 0))
+        .join(TransactionModel, TransactionModel.id == TransactionLineModel.transaction_id)
+        .where(TransactionModel.company_id == g.company.id, TransactionModel.is_posted == True,  # noqa: E712
+               TransactionLineModel.account_id == account_id)
+    ).one()
+    cash_ids = [a.id for a in accounts if a.code.startswith("38") and a.id != account_id]
+    own_transactions = select(TransactionLineModel.transaction_id).where(TransactionLineModel.account_id == account_id)
+    cash_id = db.exec(
+        select(TransactionLineModel.account_id)
+        .join(TransactionModel, TransactionModel.id == TransactionLineModel.transaction_id)
+        .where(TransactionModel.company_id == g.company.id,
+               col(TransactionLineModel.transaction_id).in_(own_transactions),
+               col(TransactionLineModel.account_id).in_(cash_ids))
+        .order_by(col(TransactionModel.transaction_date).desc(), col(TransactionModel.id).desc())
+        .limit(1)
+    ).first() if cash_ids else None
+    cash_id = cash_id or (cash_ids[0] if cash_ids else None)
+    return [{"account_id": account_id, "amount": -Decimal(balance)},
+            {"account_id": cash_id, "amount": Decimal(balance)}]
 
 
 @web.route("/transactions/<int:transaction_id>/edit", methods=["GET", "POST"])
