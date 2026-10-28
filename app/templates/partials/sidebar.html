@@ -2,7 +2,7 @@
 <div class="drawer-scrim" data-drawer-close></div>
 <aside class="sidebar" data-drawer>
   <div class="brand-block">
-    <a href="{{ url_for('web.dashboard') }}" data-nav="dashboard" class="wordmark"><span class="brand-mark">{{ icon('scale') }}</span>Home<span>Accounting</span></a>
+    <a href="{{ url_for('web.dashboard') }}" data-nav="dashboard" class="wordmark"><img class="brand-mark" src="{{ url_for('static', filename='favicon.svg') }}" alt="">Home<span>Accounting</span></a>
     <p>Διπλογραφική λογιστική</p>
   </div>
   <form action="{{ url_for('web.switch_company') }}" method="post" class="company-switcher">

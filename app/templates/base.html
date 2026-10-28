@@ -7,10 +7,11 @@
   <meta name="theme-color" content="#172a31">
   <meta name="htmx-config" content='{"globalViewTransitions": false, "scrollBehavior": "instant"}'>
   <title>{% block title %}HomeAccounting{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,500..700;1,500..700&family=Manrope:wght@400..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css', v='20260916-olap-2') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css', v='20261028-logo') }}">
   <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
   <script src="{{ url_for('static', filename='js/app.js', v='20260916-olap-2') }}" defer></script>
   <script src="{{ url_for('static', filename='js/olap.js', v='20260916-olap-2') }}" defer></script>

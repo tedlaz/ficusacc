@@ -153,8 +153,7 @@ tbody tr:nth-child(n + 10), .compact-list > div:nth-child(n + 10), .journal-entr
 .brand-block { position: relative; padding: 0 10px 25px; border-bottom: 1px solid #ffffff1a; }
 .wordmark { display: inline-flex; align-items: center; gap: 9px; font-weight: 700; letter-spacing: -.04em; font-size: 1.35rem; }
 .wordmark span { color: var(--amber); }
-.brand-mark { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 9px; color: #fff !important; background: linear-gradient(145deg, var(--amber), #b9781f); box-shadow: 0 6px 14px #d99a3d40; transition: transform .35s var(--spring); }
-.brand-mark .ui-icon { width: 17px; height: 17px; }
+.brand-mark { width: 30px; height: 30px; border-radius: 9px; box-shadow: 0 0 0 1px #ffffff26, 0 6px 14px #0000004d; transition: transform .35s var(--spring); }
 .wordmark:hover .brand-mark { transform: rotate(-8deg) scale(1.08); }
 .brand-block p { margin: 7px 0 0; color: #aab8b6; font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; }
 .company-switcher { position: relative; margin: 22px 0; }
