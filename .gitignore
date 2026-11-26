@@ -13,3 +13,4 @@ wheels/
 pytest-of-*/
 backups/*
 !backups/.gitkeep
+.env
