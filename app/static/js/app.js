@@ -91,25 +91,27 @@ document.addEventListener('submit', async (event) => {
 
   event.preventDefault()
   event.stopPropagation()
-  if (form.dataset.confirm && !window.confirm(form.dataset.confirm)) return
-
   const submitter = event.submitter
+  const confirmText = submitter?.dataset.confirm || form.dataset.confirm
+  if (confirmText && !window.confirm(confirmText)) return
+  const action = submitter?.getAttribute('formaction') || form.action
+  const body = new FormData(form, submitter) // before disabling: a disabled submitter's name/value is dropped
   if (submitter) {
     submitter.disabled = true
     submitter.classList.add('is-busy')
   }
   const row = isTransactionAction ? form.closest('tr, [data-dashboard-transaction]') : null
   try {
-    const response = await fetch(form.action, {
+    const response = await fetch(action, {
       method: (form.method || 'post').toUpperCase(),
-      body: new FormData(form),
+      body,
       headers: { 'HX-Request': 'true', 'X-CSRFToken': csrfToken() },
       credentials: 'same-origin',
     })
     const redirect = response.headers.get('HX-Redirect')
     if (redirect) {
       startNavProgress()
-      if (row && form.action.endsWith('/delete')) row.classList.add('is-leaving')
+      if (row && action.endsWith('/delete')) row.classList.add('is-leaving')
       window.location.assign(redirect)
       return
     }
@@ -589,7 +591,7 @@ function updateBalance(form) {
     window.setTimeout(() => state.classList.remove('is-flipping'), 250)
   }
   state.classList.toggle('unbalanced', !balanced)
-  form.querySelector('[data-save-transaction]').disabled = !balanced
+  form.querySelectorAll('[data-save-transaction]').forEach((button) => { button.disabled = !balanced })
 }
 
 function syncAutoBalance(form) {

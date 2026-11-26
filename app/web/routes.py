@@ -1240,12 +1240,9 @@ def transactions_index():
     accounts = list(db.exec(select(AccountModel).where(AccountModel.company_id == g.company.id)).all())
     pagination = {"page": page, "pages": pages, "total": total}
     export_end = date.today()
-    locks = balance_locks.lock_dates(db, g.company.id)
-    locked_ids = {t.id for t in transactions
-                  if any(l.account_id in locks and t.transaction_date <= locks[l.account_id] for l in t.lines)}
     return render_template("transactions/index.html", transactions=transactions, filters=filters,
                            is_filtered=any(filters[key] for key in ("q", "date", "min", "max", "status")),
-                           account_map={a.id: a for a in accounts}, pagination=pagination, locked_ids=locked_ids,
+                           account_map={a.id: a for a in accounts}, pagination=pagination,
                            export_start=export_end - timedelta(days=365), export_end=export_end)
 
 
@@ -1487,6 +1484,8 @@ def save_transaction(transaction, accounts):
     transaction.description = request.form.get("description", "").strip()
     transaction.reference = request.form.get("reference", "").strip() or None
     transaction.updated_at = datetime.now(timezone.utc)
+    if request.form.get("post") == "1":  # lock check above already covers posting
+        transaction.is_posted = True
     db.add(transaction)
     db.flush()
     for index, (account_id, amount, description) in enumerate(parsed):
@@ -1505,7 +1504,8 @@ def transaction_view(transaction_id):
         abort(404)
     accounts = list(get_db().exec(select(AccountModel).where(AccountModel.company_id == g.company.id)).all())
     return render_template("transactions/detail.html", transaction=transaction,
-                           account_map={a.id: a for a in accounts})
+                           account_map={a.id: a for a in accounts},
+                           locked=bool(balance_locks.blocking_lines(get_db(), transaction)))
 
 
 @web.get("/transactions/<int:transaction_id>/preview")

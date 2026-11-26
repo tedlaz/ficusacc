@@ -29,39 +29,19 @@
   </div>
 </form>
 <section class="panel table-panel"><div class="table-wrap"><table>
-  <thead><tr><th>Ημερομηνία</th><th class="col-grow">Περιγραφή</th><th>Σχετικό</th><th class="numeric">Ποσό</th><th></th><th></th></tr></thead>
+  <thead><tr><th>Ημερομηνία</th><th class="col-grow">Περιγραφή</th><th class="hide-narrow">Σχετικό</th><th class="numeric">Ποσό</th></tr></thead>
   <tbody>
   {% for item in transactions %}
     {% set debit = item.lines|selectattr('amount', 'gt', 0)|sum(attribute='amount') %}
-    <tr data-transaction-row>
+    {% set view_url = url_for('web.transaction_view' if item.is_posted else 'web.transaction_edit', transaction_id=item.id, next=here) %}
+    <tr class="clickable-row{{ ' is-draft' if not item.is_posted }}"{% if not item.is_posted %} title="Πρόχειρη"{% endif %} data-transaction-row data-modal-url="{{ view_url }}">
       <td data-label="Ημερομηνία">{{ item.transaction_date|dategr }}</td>
-      <td data-label="Περιγραφή" class="col-grow"><strong>{{ item.description }}</strong></td>
-      <td data-label="Σχετικό">{{ item.reference or '—' }}</td>
+      <td data-label="Περιγραφή" class="col-grow"><a href="{{ view_url }}"><strong>{{ item.description }}</strong></a></td>
+      <td data-label="Σχετικό" class="hide-narrow">{{ item.reference or '—' }}</td>
       <td data-label="Ποσό" class="amount">{{ debit|money }}</td>
-      <td data-label="Κατάσταση"><span class="badge badge-icon {{ 'posted' if item.is_posted else 'draft' }}" role="img" aria-label="{{ 'Οριστική' if item.is_posted else 'Πρόχειρη' }}">{{ icon('check-circle' if item.is_posted else 'clock') }}</span></td>
-      <td class="row-actions">
-        <a class="icon-action" href="{{ url_for('web.transaction_view', transaction_id=item.id) }}" data-modal-url="{{ url_for('web.transaction_view', transaction_id=item.id) }}" data-transaction-preview-url="{{ url_for('web.transaction_preview', transaction_id=item.id) }}" data-tooltip="Προβολή" aria-label="Προβολή">{{ icon('eye') }}</a>
-        {% if item.is_posted %}
-          <a class="icon-action" href="{{ url_for('web.transaction_copy', transaction_id=item.id) }}" data-modal-url="{{ url_for('web.transaction_copy', transaction_id=item.id, next=here) }}" data-tooltip="Αντιγραφή" aria-label="Αντιγραφή">{{ icon('copy') }}</a>
-          <form method="post" action="{{ url_for('web.transaction_unpost', transaction_id=item.id) }}" data-transaction-action data-confirm="Μετατροπή σε πρόχειρη εγγραφή;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path.rstrip('?') }}">
-            {% if item.id in locked_ids %}<button class="icon-action" type="button" disabled data-tooltip="Κλειδωμένη: επιβεβαιωμένο υπόλοιπο λογαριασμού" aria-label="Κλειδωμένη: επιβεβαιωμένο υπόλοιπο λογαριασμού">{{ icon('lock') }}</button>{% else %}<button class="icon-action" data-tooltip="Αναίρεση οριστικοποίησης" aria-label="Αναίρεση οριστικοποίησης">{{ icon('undo') }}</button>{% endif %}
-          </form>
-        {% else %}
-          <a class="icon-action" href="{{ url_for('web.transaction_edit', transaction_id=item.id) }}" data-modal-url="{{ url_for('web.transaction_edit', transaction_id=item.id, next=here) }}" data-tooltip="Επεξεργασία" aria-label="Επεξεργασία">{{ icon('edit') }}</a>
-          <form method="post" action="{{ url_for('web.transaction_post', transaction_id=item.id) }}" data-transaction-action data-confirm="Οριστικοποίηση εγγραφής;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path.rstrip('?') }}">
-            {% if item.id in locked_ids %}<button class="icon-action" type="button" disabled data-tooltip="Κλειδωμένη: επιβεβαιωμένο υπόλοιπο λογαριασμού" aria-label="Κλειδωμένη: επιβεβαιωμένο υπόλοιπο λογαριασμού">{{ icon('lock') }}</button>{% else %}<button class="icon-action" data-tooltip="Οριστικοποίηση" aria-label="Οριστικοποίηση">{{ icon('check') }}</button>{% endif %}
-          </form>
-          <form method="post" action="{{ url_for('web.transaction_delete', transaction_id=item.id) }}" data-transaction-action data-confirm="Οριστική διαγραφή εγγραφής;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path.rstrip('?') }}">
-            <button class="icon-action icon-action-danger" data-tooltip="Διαγραφή" aria-label="Διαγραφή">{{ icon('trash') }}</button>
-          </form>
-        {% endif %}
-      </td>
     </tr>
   {% else %}
-    <tr><td colspan="6" class="table-empty">{% if is_filtered %}Καμία εγγραφή δεν ταιριάζει στα φίλτρα.{% else %}Δεν υπάρχουν λογιστικές εγγραφές.{% endif %}</td></tr>
+    <tr><td colspan="4" class="table-empty">{% if is_filtered %}Καμία εγγραφή δεν ταιριάζει στα φίλτρα.{% else %}Δεν υπάρχουν λογιστικές εγγραφές.{% endif %}</td></tr>
   {% endfor %}
   </tbody>
 </table></div></section>

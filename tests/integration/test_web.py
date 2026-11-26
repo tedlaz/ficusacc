@@ -227,11 +227,12 @@ def test_balanced_transaction_post_and_reports(client, csrf, logged_in, app):
     assert client.post(f"/transactions/{transaction_id}/post", data={"csrf_token": csrf}).status_code == 302
     page = client.get("/transactions")
     assert page.status_code == 200
-    assert 'data-tooltip="Προβολή"' in page.text
-    assert f'data-transaction-preview-url="/transactions/{transaction_id}/preview"' in page.text
-    assert 'data-tooltip="Αντιγραφή"' in page.text
-    assert 'data-tooltip="Αναίρεση οριστικοποίησης"' in page.text
-    assert "data-modal-url" in page.text
+    assert f'data-modal-url="/transactions/{transaction_id}?next=/transactions"' in page.text
+    assert 'data-tooltip="Αναίρεση οριστικοποίησης"' not in page.text  # actions live in the view only
+    view = client.get(f"/transactions/{transaction_id}?next=/transactions")
+    assert 'data-tooltip="Αναίρεση οριστικοποίησης"' in view.text
+    assert 'data-tooltip="Δημιουργία παρόμοιας εγγραφής"' in view.text
+    assert 'data-tooltip="Διαγραφή"' not in view.text
     new_form = client.get("/transactions/new", headers={"HX-Request": "true"})
     assert new_form.status_code == 200
     assert "data-auto-balance" in new_form.text
@@ -1090,7 +1091,7 @@ def test_transactions_list_filters_and_sorting(client, logged_in, app):
     def titles(url):
         page = client.get(url)
         assert page.status_code == 200
-        return re.findall(r"<td data-label=\"Περιγραφή\" class=\"col-grow\"><strong>(.*?)</strong>", page.text)
+        return re.findall(r"<td data-label=\"Περιγραφή\" class=\"col-grow\"><a href=\"[^\"]*\"><strong>(.*?)</strong>", page.text)
 
     assert titles("/transactions") == ["Λογαριασμός ΔΕΗ", "Ενοίκιο Ιανουαρίου", "Αγορά αναλωσίμων", "«ΆΛΦΑ» τιμολόγιο"]
     assert titles("/transactions?sort=date&dir=asc")[0] == "«ΆΛΦΑ» τιμολόγιο"
@@ -1116,7 +1117,9 @@ def test_transactions_list_filters_and_sorting(client, logged_in, app):
     assert titles("/transactions?q=nothing-here") == []
     assert "Καμία εγγραφή δεν ταιριάζει" in client.get("/transactions?q=nothing-here").text
     page = client.get("/transactions?status=draft&sort=amount&dir=asc")
-    assert 'name="next" value="/transactions?status=draft&amp;sort=amount&amp;dir=asc"' in page.text
+    view_url = re.search(r'data-modal-url="(/transactions/\d+/edit\?next=[^"]+)"', page.text).group(1)
+    assert view_url.endswith("?next=/transactions?status%3Ddraft%26sort%3Damount%26dir%3Dasc")
+    assert 'name="next" value="/transactions?status=draft&amp;sort=amount&amp;dir=asc"' in client.get(view_url).text
 
 
 def test_editing_a_transaction_returns_to_the_filtered_list(client, csrf, logged_in, app):
@@ -1137,11 +1140,13 @@ def test_editing_a_transaction_returns_to_the_filtered_list(client, csrf, logged
 
     listing = "/transactions?status=draft&sort=amount&dir=asc"
     page = client.get(listing)
-    assert (f'data-modal-url="/transactions/{transaction_id}/edit?next=/transactions?status%3Ddraft%26sort%3Damount%26dir%3Dasc"'
-            in page.text)
-
+    encoded = "/transactions?status%3Ddraft%26sort%3Damount%26dir%3Dasc"
+    # A draft row opens the edit form directly, which also carries delete and save-and-post.
+    assert f'data-modal-url="/transactions/{transaction_id}/edit?next={encoded}"' in page.text
     form = client.get(f"/transactions/{transaction_id}/edit?next={quote(listing, safe='')}")
     assert f'name="next" value="{listing.replace("&", "&amp;")}"' in form.text
+    assert f'formaction="/transactions/{transaction_id}/delete"' in form.text
+    assert 'name="post" value="1"' in form.text
 
     response = client.post(f"/transactions/{transaction_id}/edit", headers={"HX-Request": "true"}, data={
         "csrf_token": csrf, "next": listing, "transaction_date": "15/01/2026", "description": "Αλλαγμένη",
@@ -1157,6 +1162,15 @@ def test_editing_a_transaction_returns_to_the_filtered_list(client, csrf, logged
         "line_description": ["", ""],
     })
     assert response.headers["HX-Redirect"] == "/transactions"
+
+    # Save-and-post stores the edits and posts in one step.
+    client.post(f"/transactions/{transaction_id}/edit", data={
+        "csrf_token": csrf, "post": "1", "transaction_date": "15/01/2026", "description": "Τελική",
+        "account_id": [str(rent_id), str(cash_id)], "amount": ["70", "-70"], "line_description": ["", ""],
+    })
+    with Session(app.extensions["sqlmodel_engine"]) as db:
+        saved = db.get(TransactionModel, transaction_id)
+        assert saved.is_posted and saved.description == "Τελική"
 
 
 def test_settings_page_gates_inactive_accounts_in_entry_forms(client, logged_in, app, csrf):
@@ -1259,8 +1273,8 @@ def test_balance_confirmation_locks_earlier_movements(client, logged_in, app, cs
     assert not is_posted(draft_id)
     client.post(f"/transactions/{posted_id}/unpost", data={"csrf_token": csrf})
     assert is_posted(posted_id)
-    listing = client.get("/transactions")
-    assert listing.text.count('disabled data-tooltip="Κλειδωμένη') == 2
+    for locked_id in (draft_id, posted_id):
+        assert 'disabled data-tooltip="Κλειδωμένη' in client.get(f"/transactions/{locked_id}").text
 
     # Later movements are unaffected.
     later_id = new_transaction("05/02/2026", "5", "February")
