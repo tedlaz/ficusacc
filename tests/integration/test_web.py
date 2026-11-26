@@ -1014,7 +1014,7 @@ def test_account_types_are_shown_in_greek(client, csrf, logged_in, app):
         db.add(TransactionLineModel(transaction_id=transaction.id, account_id=cash.id, amount=-50, line_order=1))
         db.commit()
     listing = client.get("/accounts")
-    assert 'class="type-pill type-liability">Υποχρεώσεις<' in listing.text
+    assert 'class="type-pill type-liability badge-icon" role="img" aria-label="Υποχρεώσεις"' in listing.text
     form = client.get("/accounts/new", headers={"HX-Request": "true"})
     for english, greek in (("asset", "Ενεργητικό"), ("liability", "Υποχρεώσεις"), ("equity", "Καθαρή θέση"),
                            ("revenue", "Έσοδα"), ("expense", "Έξοδα")):
@@ -1090,7 +1090,7 @@ def test_transactions_list_filters_and_sorting(client, logged_in, app):
     def titles(url):
         page = client.get(url)
         assert page.status_code == 200
-        return re.findall(r"<td data-label=\"Περιγραφή\"><strong>(.*?)</strong>", page.text)
+        return re.findall(r"<td data-label=\"Περιγραφή\" class=\"col-grow\"><strong>(.*?)</strong>", page.text)
 
     assert titles("/transactions") == ["Λογαριασμός ΔΕΗ", "Ενοίκιο Ιανουαρίου", "Αγορά αναλωσίμων", "«ΆΛΦΑ» τιμολόγιο"]
     assert titles("/transactions?sort=date&dir=asc")[0] == "«ΆΛΦΑ» τιμολόγιο"
@@ -1332,7 +1332,7 @@ def test_accounts_list_filters_and_edits_return_to_the_same_view(client, logged_
     assert by_code.text.count("data-account-row") == 10
     inactive = client.get("/accounts?status=inactive")
     assert inactive.text.count("data-account-row") == 10
-    assert "Ανενεργός" in inactive.text and "Ενεργός<" not in inactive.text
+    assert 'aria-label="Ανενεργός"' in inactive.text and 'aria-label="Ενεργός"' not in inactive.text
     assert client.get("/accounts?type=expense").text.count("data-account-row") == 20
     combined = client.get("/accounts?type=expense&status=all&page=2")
     assert combined.text.count("data-account-row") == 5

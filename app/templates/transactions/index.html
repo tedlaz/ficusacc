@@ -29,16 +29,16 @@
   </div>
 </form>
 <section class="panel table-panel"><div class="table-wrap"><table>
-  <thead><tr><th>Ημερομηνία</th><th>Περιγραφή</th><th>Σχετικό</th><th class="numeric">Ποσό</th><th>Κατάσταση</th><th></th></tr></thead>
+  <thead><tr><th>Ημερομηνία</th><th class="col-grow">Περιγραφή</th><th>Σχετικό</th><th class="numeric">Ποσό</th><th></th><th></th></tr></thead>
   <tbody>
   {% for item in transactions %}
     {% set debit = item.lines|selectattr('amount', 'gt', 0)|sum(attribute='amount') %}
     <tr data-transaction-row>
       <td data-label="Ημερομηνία">{{ item.transaction_date|dategr }}</td>
-      <td data-label="Περιγραφή"><strong>{{ item.description }}</strong></td>
+      <td data-label="Περιγραφή" class="col-grow"><strong>{{ item.description }}</strong></td>
       <td data-label="Σχετικό">{{ item.reference or '—' }}</td>
       <td data-label="Ποσό" class="amount">{{ debit|money }}</td>
-      <td data-label="Κατάσταση"><span class="badge {{ 'posted' if item.is_posted else 'draft' }}">{{ 'Οριστική' if item.is_posted else 'Πρόχειρη' }}</span></td>
+      <td data-label="Κατάσταση"><span class="badge badge-icon {{ 'posted' if item.is_posted else 'draft' }}" role="img" aria-label="{{ 'Οριστική' if item.is_posted else 'Πρόχειρη' }}">{{ icon('check-circle' if item.is_posted else 'clock') }}</span></td>
       <td class="row-actions">
         <a class="icon-action" href="{{ url_for('web.transaction_view', transaction_id=item.id) }}" data-modal-url="{{ url_for('web.transaction_view', transaction_id=item.id) }}" data-transaction-preview-url="{{ url_for('web.transaction_preview', transaction_id=item.id) }}" data-tooltip="Προβολή" aria-label="Προβολή">{{ icon('eye') }}</a>
         {% if item.is_posted %}

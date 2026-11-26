@@ -5,6 +5,21 @@ let transactionPreviewHideTimer
 let transactionPreviewController
 let transactionPreviewElement
 
+/* ---------- icon badge tooltip (fixed, so table overflow can't clip it) ---------- */
+const badgeTip = Object.assign(document.createElement('div'), { className: 'badge-tip', hidden: true })
+document.body.append(badgeTip)
+document.addEventListener('mouseover', (event) => {
+  const badge = event.target.closest('.badge-icon[aria-label]')
+  badgeTip.hidden = !badge
+  if (!badge) return
+  badgeTip.textContent = badge.getAttribute('aria-label')
+  const box = badge.getBoundingClientRect()
+  const tip = badgeTip.getBoundingClientRect()
+  badgeTip.style.left = `${Math.max(4, Math.min(innerWidth - tip.width - 4, box.left + (box.width - tip.width) / 2))}px`
+  badgeTip.style.top = `${box.top - tip.height - 7}px`
+})
+document.addEventListener('scroll', () => { badgeTip.hidden = true }, true)
+
 /* ---------- modal links ---------- */
 document.addEventListener('click', async (event) => {
   const link = event.target.closest('[data-modal-url]')
@@ -36,9 +51,8 @@ function setTrialRow(tree, row, expanded) {
 document.addEventListener('click', (event) => {
   const tree = event.target.closest('[data-trial-tree]')
   if (!tree) return
-  const toggle = event.target.closest('[data-trial-toggle]')
-  if (toggle) {
-    const row = toggle.closest('tr')
+  const row = event.target.closest('tr[aria-expanded]')
+  if (row && !event.target.closest('a')) {
     setTrialRow(tree, row, row.getAttribute('aria-expanded') !== 'true')
     return
   }

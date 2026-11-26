@@ -1,3 +1,7 @@
 {% macro icon(name) -%}
 <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#icon-{{ name }}"></use></svg>
 {%- endmacro %}
+
+{% macro type_badge(account_type) -%}
+<span class="type-pill type-{{ account_type.value }} badge-icon" role="img" aria-label="{{ account_type|account_type_label }}">{{ icon({'asset': 'wallet', 'liability': 'receipt', 'equity': 'scale', 'revenue': 'trend-up', 'expense': 'trend-down'}[account_type.value]) }}</span>
+{%- endmacro %}

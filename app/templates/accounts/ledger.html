@@ -15,20 +15,21 @@
   </div>
 </header>
 <section class="panel table-panel"><div class="table-wrap"><table>
-  <thead><tr><th>Ημερομηνία</th><th>Περιγραφή</th><th>Σχετικό</th><th class="numeric">Χρέωση</th><th class="numeric">Πίστωση</th><th class="numeric">Υπόλοιπο</th></tr></thead>
+  <thead><tr><th>Ημερομηνία</th><th class="col-grow">Περιγραφή</th><th class="hide-narrow">Σχετικό</th><th class="numeric hide-narrow">Χρέωση</th><th class="numeric hide-narrow">Πίστωση</th><th class="numeric hide-narrow">Υπόλοιπο</th><th class="numeric show-narrow">Ποσό</th></tr></thead>
   <tbody>
   {% for entry in entries %}
     {% set locked = locked_until and entry.transaction.transaction_date <= locked_until %}
     <tr data-ledger-row class="{{ 'ledger-locked' if locked }}">
       <td data-label="Ημερομηνία">{% if locked %}<span class="lock-mark" aria-label="Κλειδωμένη κίνηση">{{ icon('lock') }}</span>{% endif %}<a class="account-link ledger-date-link" href="{{ url_for('web.transaction_view', transaction_id=entry.transaction.id) }}" data-modal-url="{{ url_for('web.transaction_view', transaction_id=entry.transaction.id) }}" data-transaction-view data-tooltip="Προβολή λογιστικού άρθρου">{{ entry.transaction.transaction_date|dategr }}</a></td>
-      <td data-label="Περιγραφή"><strong>{{ entry.transaction.description }}</strong>{% if entry.line.description %}<small>{{ entry.line.description }}</small>{% endif %}</td>
-      <td data-label="Σχετικό">{{ entry.transaction.reference or '—' }}</td>
-      <td data-label="Χρέωση" class="amount">{{ entry.line.amount|money if entry.line.amount > 0 else '—' }}</td>
-      <td data-label="Πίστωση" class="amount">{{ (-entry.line.amount)|money if entry.line.amount < 0 else '—' }}</td>
-      <td data-label="Υπόλοιπο" class="amount ledger-balance">{{ entry.balance|money }}</td>
+      <td data-label="Περιγραφή" class="col-grow"><strong>{{ entry.transaction.description }}</strong>{% if entry.line.description %}<small>{{ entry.line.description }}</small>{% endif %}</td>
+      <td data-label="Σχετικό" class="hide-narrow">{{ entry.transaction.reference or '—' }}</td>
+      <td data-label="Χρέωση" class="amount hide-narrow">{{ entry.line.amount|money if entry.line.amount > 0 else '—' }}</td>
+      <td data-label="Πίστωση" class="amount hide-narrow">{{ (-entry.line.amount)|money if entry.line.amount < 0 else '—' }}</td>
+      <td data-label="Υπόλοιπο" class="amount ledger-balance hide-narrow">{{ entry.balance|money }}</td>
+      <td class="amount show-narrow {{ 'amount-negative' if entry.line.amount < 0 }}">{{ entry.line.amount|money }}</td>
     </tr>
   {% else %}
-    <tr><td colspan="6" class="table-empty">Δεν υπάρχουν οριστικοποιημένες κινήσεις για τον λογαριασμό.</td></tr>
+    <tr><td colspan="7" class="table-empty">Δεν υπάρχουν οριστικοποιημένες κινήσεις για τον λογαριασμό.</td></tr>
   {% endfor %}
   </tbody>
 </table></div></section>

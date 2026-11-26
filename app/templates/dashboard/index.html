@@ -147,7 +147,7 @@
     <header><div><p class="eyebrow">Με σειρά εισόδου</p><h2>Τελευταίες εγγραφές</h2></div><a href="{{ url_for('web.transactions_index') }}" class="panel-link">Όλες {{ icon('arrow-right') }}</a></header>
     <div class="compact-list transactions">
       {% for item in transactions %}
-      <div data-dashboard-transaction><time>{{ item.transaction_date|dategr }}</time><strong>{{ item.description }}</strong><span class="badge {{ 'posted' if item.is_posted else 'draft' }}">{{ 'Οριστική' if item.is_posted else 'Πρόχειρη' }}</span><a class="icon-action" href="{{ url_for('web.transaction_view', transaction_id=item.id) }}" data-modal-url="{{ url_for('web.transaction_view', transaction_id=item.id) }}" data-transaction-preview-url="{{ url_for('web.transaction_preview', transaction_id=item.id) }}" data-tooltip="Προβολή εγγραφής" aria-label="Προβολή εγγραφής">{{ icon('eye') }}</a></div>
+      <div data-dashboard-transaction><time>{{ item.transaction_date|dategr }}</time><strong>{{ item.description }}</strong><span class="badge badge-icon {{ 'posted' if item.is_posted else 'draft' }}" role="img" aria-label="{{ 'Οριστική' if item.is_posted else 'Πρόχειρη' }}">{{ icon('check-circle' if item.is_posted else 'clock') }}</span><a class="icon-action" href="{{ url_for('web.transaction_view', transaction_id=item.id) }}" data-modal-url="{{ url_for('web.transaction_view', transaction_id=item.id) }}" data-transaction-preview-url="{{ url_for('web.transaction_preview', transaction_id=item.id) }}" data-tooltip="Προβολή εγγραφής" aria-label="Προβολή εγγραφής">{{ icon('eye') }}</a></div>
       {% else %}<p class="muted">Δεν υπάρχουν εγγραφές.</p>{% endfor %}
     </div>
   </article>

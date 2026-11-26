@@ -6,10 +6,10 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy.orm import selectinload
-from sqlmodel import Session, func, select
+from sqlmodel import Session, case, func, select
 
 from app.domain.types import AccountType
-from app.infrastructure.database.models import AccountModel, TransactionModel
+from app.infrastructure.database.models import AccountModel, TransactionLineModel, TransactionModel
 from app.web.account_tree import ancestors, prefix_names
 
 
@@ -73,20 +73,34 @@ def account_balances(db: Session, company_id: int, as_of: date, types=None):
     if types:
         accounts = [account for account in accounts if account.account_type in types]
     balances = {account.id: AccountBalance(account) for account in accounts}
-    for transaction in transactions_between(db, company_id, date(1900, 1, 1), as_of):
-        if not transaction.is_posted:
-            continue
-        for line in transaction.lines:
-            item = balances.get(line.account_id)
-            if item is None:
-                continue
-            if line.amount > 0:
-                item.debit_total += line.amount
-            else:
-                item.credit_total += abs(line.amount)
-    for item in balances.values():
-        item.balance = item.debit_total - item.credit_total
+    _apply_totals(db, company_id, date(1900, 1, 1), as_of, balances)
     return balances
+
+
+def _apply_totals(db: Session, company_id: int, start: date, end: date, balances: dict) -> None:
+    """Fill debit/credit/balance from posted lines in [start, end], summed in SQL per account."""
+    line = TransactionLineModel
+    statement = (
+        select(
+            line.account_id,
+            func.sum(case((line.amount > 0, line.amount), else_=0)),
+            func.sum(case((line.amount < 0, -line.amount), else_=0)),
+        )
+        .join(TransactionModel, TransactionModel.id == line.transaction_id)
+        .where(
+            TransactionModel.company_id == company_id,
+            TransactionModel.is_posted == True,  # noqa: E712
+            TransactionModel.transaction_date >= start,
+            TransactionModel.transaction_date <= end,
+        )
+        .group_by(line.account_id)
+    )
+    for account_id, debit, credit in db.exec(statement).all():
+        item = balances.get(account_id)
+        if item is not None:
+            item.debit_total = Decimal(str(debit or 0))
+            item.credit_total = Decimal(str(credit or 0))
+            item.balance = item.debit_total - item.credit_total
 
 
 def month_start(value: date, offset: int = 0) -> date:
@@ -242,19 +256,7 @@ def income_statement(db: Session, company_id: int, start: date, end: date):
     )
     accounts = [a for a in accounts if a.account_type in {AccountType.REVENUE, AccountType.EXPENSE}]
     balances = {a.id: AccountBalance(a) for a in accounts}
-    for transaction in transactions_between(db, company_id, start, end):
-        if not transaction.is_posted:
-            continue
-        for line in transaction.lines:
-            item = balances.get(line.account_id)
-            if item is None:
-                continue
-            if line.amount > 0:
-                item.debit_total += line.amount
-            else:
-                item.credit_total += abs(line.amount)
-    for item in balances.values():
-        item.balance = item.debit_total - item.credit_total
+    _apply_totals(db, company_id, start, end, balances)
     moved = [x for x in balances.values() if x.balance]
     revenue = sum((abs(x.balance) for x in moved if x.account.account_type == AccountType.REVENUE), Decimal("0"))
     expense = sum((x.balance for x in moved if x.account.account_type == AccountType.EXPENSE), Decimal("0"))
